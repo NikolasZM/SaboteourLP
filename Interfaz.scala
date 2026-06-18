@@ -3,14 +3,14 @@
 import scalafx.application.JFXApp3
 import scalafx.scene.Scene
 import scalafx.scene.paint.Color.*
-import scalafx.scene.shape.Rectangle
-import scalafx.scene.layout.Pane
-import scalafx.scene.text.Text
-import scalafx.scene.text.Font
+import scalafx.scene.shape.{Rectangle, Line}
+import scalafx.scene.layout.{Pane, VBox}
+import scalafx.scene.text.{Text, Font, FontWeight}
+import scalafx.scene.control.Button
 import scalafx.scene.input.MouseEvent
+import scalafx.geometry.Pos
 import scalafx.Includes.*
-import scalafx.scene.shape.Line
-
+import scala.util.Random
 
 object InterfazJuego extends JFXApp3 {
 
@@ -18,164 +18,268 @@ object InterfazJuego extends JFXApp3 {
   var cartaSeleccionada: Option[Carta] = None
 
   val anchoCarta = 60
-  val altoCarta = 90
+  val altoCarta = 85
+  val offsetTableroY = 60
 
   override def start(): Unit = {
+    
+    // --- CREACIÓN DE LA ESCENA DEL MENÚ DE INICIO ---
+    val layoutMenu = new VBox {
+      spacing = 30
+      alignment = Pos.Center
+      prefWidth = 900
+      prefHeight = 740
+      style = "-fx-background-color: #222222;" // Fondo gris oscuro
+
+      // Título del juego
+      val txtTitulo = new Text {
+        text = "SABOTAJE"
+        fill = Gold
+        font = Font.font("Arial", FontWeight.Bold, 60)
+      }
+
+      val txtSubtitulo = new Text {
+        text = "En busca del oro"
+        fill = LightGray
+        font = Font.font("Arial", 18)
+      }
+
+      // Botón Jugar
+      val btnJugar = new Button("JUGAR") {
+        prefWidth = 200
+        prefHeight = 50
+        style = "-fx-font-size: 18px; -fx-background-color: #2e7d32; -fx-text-fill: white; -fx-font-weight: bold; -fx-cursor: hand;"
+        
+        // Al hacer clic, inicializa el juego y cambia la escena
+        onAction = () => {
+          inicializarLogicaJuego()
+          stage.scene = crearEscenaJuego()
+        }
+      }
+
+      // Botón Salir
+      val btnSalir = new Button("SALIR") {
+        prefWidth = 200
+        prefHeight = 50
+        style = "-fx-font-size: 18px; -fx-background-color: #c62828; -fx-text-fill: white; -fx-font-weight: bold; -fx-cursor: hand;"
+        
+        onAction = () => {
+          sys.exit(0) // Cierra la aplicación por completo
+        }
+      }
+
+      children = List(txtTitulo, txtSubtitulo, btnJugar, btnSalir)
+    }
+
+    val escenaMenu = new Scene(layoutMenu, 900, 740)
+
+    // El Stage arranca mostrando el menú principal
+    stage = new JFXApp3.PrimaryStage {
+      title = "Saboteur - Menú Principal"
+      width = 900
+      height = 740
+      scene = escenaMenu
+    }
+  }
+
+  // --- FUNCIÓN PARA INICIALIZAR EL ESTADO LÓGICO ---
+  def inicializarLogicaJuego(): Unit = {
     val mazoMezclado = GeneradorMazo.crearMazoMezclado()
     val jugador1 = Jugador(1, "Jugador 1", Rol.BUSCADOR, Nil)
     
     val posInicioLogica = Posicion(2, 3)
-    val metasLogicas = List(Posicion(12, 3))
+    val metasLogicas = List(Posicion(10, 1), Posicion(10, 3), Posicion(10, 5))
     
+    val metasDistribuidasAsignadas = Random.shuffle(List(true, false, false))
+    
+    val cartasMetaLogicas = metasLogicas.zip(metasDistribuidasAsignadas).map { case (pos, esOro) =>
+      pos -> CartaTunel(
+        id = -pos.y,
+        nombre = "Destino Oculto",
+        arriba = true, abajo = true, izquierda = true, derecha = true,
+        esCallejonSinSalida = false,
+        esMeta = true,
+        estaOculta = true,
+        esOro = esOro
+      )
+    }.toMap
+
     val cartaInicioLogica = CartaTunel(0, "Inicio", arriba = true, abajo = true, izquierda = true, derecha = true, esCallejonSinSalida = false)
-    val tableroInicial = Tablero(Map(posInicioLogica -> cartaInicioLogica), posInicioLogica, metasLogicas)
+    val cuadriculaInicial = cartasMetaLogicas + (posInicioLogica -> cartaInicioLogica)
+    val tableroInicial = Tablero(cuadriculaInicial, posInicioLogica, metasLogicas)
     
-    val juegoBase = Juego(List(jugador1), tableroInicial, mazoMezclado, 1) // Empezamos en turno 1
+    val juegoBase = Juego(List(jugador1), tableroInicial, mazoMezclado, 1)
     estadoJuego = juegoBase.inicializarPartida()
+  }
 
-    stage = new JFXApp3.PrimaryStage {
-      title = "Saboteur - Turnos y Robo Automático"
-      width = 950
-      height = 680
-      
-      scene = new Scene {
-        fill = rgb(40, 40, 40)
-        val contenedor = new Pane()
+  // --- FUNCIÓN PARA CONSTRUIR LA ESCENA DEL JUEGO PRINCIPAL ---
+  def crearEscenaJuego(): Scene = {
+    new Scene {
+      fill = rgb(35, 35, 35)
+      val contenedor = new Pane()
 
-        def renderizar(): Unit = {
-          contenedor.children.clear()
+      def renderizar(): Unit = {
+        contenedor.children.clear()
 
-          // --- 1. CONTADOR DE TURNOS E INFO DEL MAZO (SUPERIOR) ---
-          val txtInfoSuperior = new Text {
-            x = 20
-            y = 35
-            text = s"TURNO: ${estadoJuego.turnoActual}   |   Cartas restantes en el mazo: ${estadoJuego.mazo.cartasRobo.size}"
-            fill = LightGreen
-            font = Font.font("Arial", 18)
+        // 1. INDICADORES SUPERIORES
+        val txtInfo = new Text {
+          x = 20; y = 30
+          text = s"TURNO: ${estadoJuego.turnoActual}  |  Mazo: ${estadoJuego.mazo.cartasRobo.size} cartas"
+          fill = LightGreen; font = Font.font("Arial", 15)
+        }
+        contenedor.children.add(txtInfo)
+
+        if (estadoJuego.mensajeAlerta.nonEmpty) {
+          val txtAlerta = new Text {
+            x = 420; y = 30
+            text = s"🔬 ¡INSPECCIÓN!: ${estadoJuego.mensajeAlerta}"
+            fill = Yellow; font = Font.font("Arial", FontWeight.Bold, 14)
           }
-          contenedor.children.add(txtInfoSuperior)
-
-          // --- 2. DIBUJAR TABLERO DE TÚNELES (Desplazado un poco hacia abajo por el contador) ---
-          val offsetTableroY = 50
-
-          estadoJuego.tablero.cuadricula.foreach { case (pos, carta) =>
-            val rect = new Rectangle {
-              x = pos.x * anchoCarta
-              y = (pos.y * altoCarta) + offsetTableroY
-              width = anchoCarta
-              height = altoCarta
-              fill = if (pos == posInicioLogica) LightBlue else SaddleBrown
-              stroke = Black
-            }
-            val txt = new Text {
-              x = (pos.x * anchoCarta) + 5
-              y = (pos.y * altoCarta) + 45 + offsetTableroY
-              text = if (pos == posInicioLogica) "Inicio" else "Túnel"
-              fill = if (pos == posInicioLogica) Black else White
-            }
-            contenedor.children.addAll(rect, txt)
-          }
-
-          // Meta visual
-          val rectMeta = new Rectangle {
-            x = 720; y = 270 + offsetTableroY; width = anchoCarta; height = altoCarta; fill = DarkRed
-          }
-          val txtMeta = new Text {
-            x = 725; y = 320 + offsetTableroY; text = "Destino"; fill = White
-          }
-          contenedor.children.addAll(rectMeta, txtMeta)
-
-          // --- 3. PANEL DE LA MANO ---
-          val lineaDivisoria = new Rectangle {
-            x = 0; y = 510; width = 950; height = 5; fill = Gray
-          }
-          val txtMano = new Text {
-            x = 20; y = 540; text = "Tu Mano (Haz clic para seleccionar):"; fill = White
-          }
-          contenedor.children.addAll(lineaDivisoria, txtMano)
-
-          val jugadorActual = estadoJuego.listaJugadores.head
-          jugadorActual.mano.zipWithIndex.foreach { case (carta, indice) =>
-            val posX = 50 + (indice * 110)
-            val posY = 550
-            
-            val esSeleccionada = cartaSeleccionada.exists(_.id == carta.id)
-
-            val rectCarta = new Rectangle {
-              x = posX
-              y = posY
-              width = 100
-              height = 70
-              fill = DarkGreen
-              stroke = if (esSeleccionada) Yellow else Black
-              strokeWidth = if (esSeleccionada) 3 else 1
-            }
-
-            rectCarta.onMouseClicked = (e: MouseEvent) => {
-              cartaSeleccionada = Some(carta)
-              renderizar()
-            }
-
-            val txtCarta = new Text {
-              x = posX + 5
-              y = posY + 35
-              text = carta.nombre.take(15)
-              fill = White
-            }
-            contenedor.children.addAll(rectCarta, txtCarta)
-          }
+          contenedor.children.add(txtAlerta)
         }
 
-        // --- GESTIÓN DEL CLICK EN EL TABLERO ---
-        onMouseClicked = (event: MouseEvent) => {
-          val offsetTableroY = 50
+        // 2. DIBUJAR TODO EL TABLERO DINÁMICO
+        estadoJuego.tablero.cuadricula.foreach { case (pos, carta) =>
+          val posX = pos.x * anchoCarta
+          val posY = (pos.y * altoCarta) + offsetTableroY
+
+          val colorCarta = if (pos == estadoJuego.tablero.posicionInicio) {
+            LightBlue
+          } else if (carta.esMeta) {
+            if (carta.estaOculta) rgb(90, 40, 40) else (if (carta.esOro) Gold else Silver)
+          } else {
+            SaddleBrown
+          }
+
+          val rect = new Rectangle {
+            x = posX; y = posY; width = anchoCarta; height = altoCarta
+            fill = colorCarta; stroke = Black
+          }
+          contenedor.children.add(rect)
+
+          if (!carta.estaOculta) {
+            val centroX = posX + (anchoCarta / 2)
+            val centroY = posY + (altoCarta / 2)
+
+            def dibujarCamino(x1: Double, y1: Double, x2: Double, y2: Double) = new Line {
+              startX = x1; startY = y1; endX = x2; endY = y2
+              stroke = LightGray; strokeWidth = 7
+            }
+
+            if (carta.arriba)    contenedor.children.add(dibujarCamino(centroX, centroY, centroX, posY))
+            if (carta.abajo)     contenedor.children.add(dibujarCamino(centroX, centroY, centroX, posY + altoCarta))
+            if (carta.izquierda) contenedor.children.add(dibujarCamino(centroX, centroY, posX, centroY))
+            if (carta.derecha)   contenedor.children.add(dibujarCamino(centroX, centroY, posX + anchoCarta, centroY))
+
+            if (carta.esCallejonSinSalida) {
+              val xBloqueo = new Text {
+                x = centroX - 5; y = centroY + 5; text = "X"; fill = Red; font = Font.font("Arial", 16)
+              }
+              contenedor.children.add(xBloqueo)
+            }
+          }
+
+          val txtNombre = new Text {
+            x = posX + 5; y = posY + 20
+            text = if (pos == estadoJuego.tablero.posicionInicio) "Inicio" else if (carta.esMeta) "Meta" else "Túnel"
+            fill = if (pos == estadoJuego.tablero.posicionInicio) Black else White; font = Font.font("Arial", 10)
+          }
+          contenedor.children.add(txtNombre)
+        }
+
+        // 3. SEPARADOR PANEL DE LA MANO
+        val lineaDivisoria = new Rectangle {
+          x = 0; y = 560; width = 900; height = 4; fill = Gray
+        }
+        val txtManoInfo = new Text {
+          x = 20; y = 585; text = "TU MANO (Selecciona una carta y haz clic en su objetivo en el mapa):"; fill = White; font = Font.font("Arial", 13)
+        }
+        contenedor.children.addAll(lineaDivisoria, txtManoInfo)
+
+        // 4. DIBUJAR CARTAS DE LA MANO
+        val jugadorActual = estadoJuego.listaJugadores.head
+        jugadorActual.mano.zipWithIndex.foreach { case (carta, indice) =>
+          val posX = 30 + (indice * 140)
+          val posY = 605
           
-          // Ajustamos el clic restando el espacio del contador superior
-          if (event.y > offsetTableroY && event.y < 500) {
-            val logicoX = event.x.toInt / anchoCarta
-            val logicoY = (event.y.toInt - offsetTableroY) / altoCarta
-            val posDestino = Posicion(logicoX, logicoY)
+          val esSeleccionada = cartaSeleccionada.exists(_.id == carta.id)
 
-            cartaSeleccionada match {
-              case Some(cartaTunel: CartaTunel) =>
-                val esValido = estadoJuego.tablero.validarColocacion(posDestino, cartaTunel)
-
-                if (esValido) {
-                  // 1. Colocar la carta en el tablero
-                  val nuevaCuadricula = estadoJuego.tablero.cuadricula + (posDestino -> cartaTunel)
-                  val nuevoTablero = estadoJuego.tablero.copy(cuadricula = nuevaCuadricula)
-
-                  // 2. Remover de la mano del jugador
-                  val jugadorActual = estadoJuego.listaJugadores.head
-                  val jugadorModificado = jugadorActual.eliminarCartaDeMano(cartaTunel.id)
-
-                  // Guardamos este estado intermedio temporalmente
-                  val estadoTemporal = estadoJuego.copy(
-                    tablero = nuevoTablero,
-                    listaJugadores = List(jugadorModificado)
-                  )
-
-                  // 3. ¡ROBAR AUTOMÁTICAMENTE Y AVANZAR TURNO!
-                  estadoJuego = estadoTemporal.avanzarTurnoYRobar(jugadorActual.id)
-
-                  cartaSeleccionada = None
-                  println(s"¡Turno completado! Carta puesta en ($logicoX, $logicoY).")
-                  renderizar()
-                } else {
-                  println(s"Jugada inválida en ($logicoX, $logicoY).")
-                }
-
-              case Some(_: CartaAccion) =>
-                println("Las cartas de acción no van en el tablero de túneles.")
-              case None =>
-                println("Selecciona una carta primero.")
+          val colorFondo = carta match {
+            case t: CartaTunel => if (t.esCallejonSinSalida) DarkGoldenrod else DarkGreen
+            case a: CartaAccion => a.tipoEfecto match {
+              case TipoAccion.SABOTAJE(_)   => Crimson
+              case TipoAccion.REPARACION(_) => DeepSkyBlue
+              case TipoAccion.MAPA          => Purple
+              case TipoAccion.DERRUMBE      => Chocolate
             }
           }
-        }
 
-        renderizar()
-        content = contenedor
+          val rectCarta = new Rectangle {
+            x = posX; y = posY; width = 125; height = 80
+            fill = colorFondo; stroke = if (esSeleccionada) Yellow else Black
+            strokeWidth = if (esSeleccionada) 3 else 1
+          }
+
+          rectCarta.onMouseClicked = (e: MouseEvent) => {
+            cartaSeleccionada = Some(carta)
+            renderizar()
+          }
+
+          val txtCarta = new Text {
+            x = posX + 8; y = posY + 45
+            text = carta.nombre; fill = White; font = Font.font("Arial", 11)
+          }
+          contenedor.children.addAll(rectCarta, txtCarta)
+        }
       }
+
+      // CAPTURA DE CLICS EN EL TABLERO
+      onMouseClicked = (event: MouseEvent) => {
+        if (event.y > offsetTableroY && event.y < 550) {
+          val logicoX = event.x.toInt / anchoCarta
+          val logicoY = (event.y.toInt - offsetTableroY) / altoCarta
+          val posDestino = Posicion(logicoX, logicoY)
+
+          cartaSeleccionada match {
+            case Some(cartaTunel: CartaTunel) =>
+              val esValido = estadoJuego.tablero.validarColocacion(posDestino, cartaTunel)
+
+              if (esValido) {
+                val nuevaCuadricula = estadoJuego.tablero.cuadricula + (posDestino -> cartaTunel)
+                val nuevoTablero = estadoJuego.tablero.copy(cuadricula = nuevaCuadricula)
+                val jugadorActual = estadoJuego.listaJugadores.head
+
+                estadoJuego = estadoJuego.avanzarTurnoYRobar(jugadorActual.id, nuevoTablero, cartaTunel.id)
+                cartaSeleccionada = None
+                renderizar()
+              } else {
+                println("Movimiento inválido de túnel.")
+              }
+
+            case Some(cartaAccion: CartaAccion) if cartaAccion.tipoEfecto == TipoAccion.MAPA =>
+              estadoJuego.tablero.cuadricula.get(posDestino) match {
+                case Some(cartaDestino) if cartaDestino.esMeta =>
+                  val queEs = if (cartaDestino.esOro) "¡¡ORO!! 💰" else "Carbón... 🪨"
+                  val textoRevelador = s"La Meta en (${posDestino.x}, ${posDestino.y}) contiene: $queEs"
+                  val jugadorActual = estadoJuego.listaJugadores.head
+                  
+                  estadoJuego = estadoJuego.avanzarTurnoYRobar(jugadorActual.id, estadoJuego.tablero, cartaAccion.id, textoRevelador)
+                  cartaSeleccionada = None
+                  renderizar()
+                case _ =>
+                  println("La lupa solo se puede usar sobre una de las 3 cartas de Meta.")
+              }
+
+            case Some(_: CartaAccion) =>
+              println("Acción no soportada en este objetivo.")
+            case None =>
+              println("Selecciona primero una carta.")
+          }
+        }
+      }
+
+      renderizar()
+      content = contenedor
     }
   }
 }

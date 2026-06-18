@@ -25,7 +25,9 @@ case class CartaTunel(
     izquierda: Boolean,
     derecha: Boolean,
     esCallejonSinSalida: Boolean,
-    tieneOro: Boolean = false
+    esMeta: Boolean = false,
+    estaOculta: Boolean = false,
+    esOro: Boolean = false
 ) extends Carta
 
 case class CartaAccion(
@@ -42,14 +44,15 @@ case class Jugador(
     herramientasRotas: List[Herramienta] = Nil
 ) {
   def estaBloqueado(): Boolean = herramientasRotas.nonEmpty
+  
   def eliminarCartaDeMano(cartaId: Int): Jugador = {
     this.copy(mano = this.mano.filterNot(_.id == cartaId))
   }
 }
 
 case class Posicion(x: Int, y: Int) {
-  def arriba: Posicion    = Posicion(x, y - 1) // En gráficos FX, restar en Y sube
-  def abajo: Posicion     = Posicion(x, y + 1) // Sumar en Y baja
+  def arriba: Posicion    = Posicion(x, y - 1)
+  def abajo: Posicion     = Posicion(x, y + 1)
   def izquierda: Posicion = Posicion(x - 1, y)
   def derecha: Posicion   = Posicion(x + 1, y)
 }
@@ -57,27 +60,26 @@ case class Posicion(x: Int, y: Int) {
 case class Tablero(
     cuadricula: Map[Posicion, CartaTunel],
     posicionInicio: Posicion,
-    metas: List[Posicion]
+    posicionesMeta: List[Posicion]
 ) {
   def validarColocacion(pos: Posicion, nuevaCarta: CartaTunel): Boolean = {
+    
     if (cuadricula.contains(pos)) return false
 
-    val vecinos = List(
-      (pos.arriba,    (c: CartaTunel) => c.abajo,     nuevaCarta.arriba),
-      (pos.abajo,     (c: CartaTunel) => c.arriba,    nuevaCarta.abajo),
-      (pos.izquierda, (c: CartaTunel) => c.derecha,   nuevaCarta.izquierda),
-      (pos.derecha,   (c: CartaTunel) => c.izquierda, nuevaCarta.derecha)
-    )
+    val vecinoArriba = cuadricula.get(pos.arriba)
+    val vecinoAbajo  = cuadricula.get(pos.abajo)
+    val vecinoIzq    = cuadricula.get(pos.izquierda)
+    val vecinoDer    = cuadricula.get(pos.derecha)
 
-    val tieneVecino = vecinos.exists { case (vecinoPos, _, _) => cuadricula.contains(vecinoPos) }
+    val tieneVecino = vecinoArriba.isDefined || vecinoAbajo.isDefined || vecinoIzq.isDefined || vecinoDer.isDefined
     if (!tieneVecino) return false
 
-    vecinos.forall { case (vecinoPos, obtenerBordeVecino, bordeNuevaCarta) =>
-      cuadricula.get(vecinoPos) match {
-        case Some(cartaVecina) => obtenerBordeVecino(cartaVecina) == bordeNuevaCarta
-        case None => true
-      }
-    }
+    val coincideArriba = vecinoArriba.forall(v => v.estaOculta || v.abajo == nuevaCarta.arriba)
+    val coincideAbajo  = vecinoAbajo.forall(v => v.estaOculta || v.arriba == nuevaCarta.abajo)
+    val coincideIzq    = vecinoIzq.forall(v => v.estaOculta || v.derecha == nuevaCarta.izquierda)
+    val coincideDer    = vecinoDer.forall(v => v.estaOculta || v.izquierda == nuevaCarta.derecha)
+
+    coincideArriba || coincideAbajo || coincideIzq || coincideDer
   }
 }
 
@@ -87,7 +89,8 @@ case class Juego(
     listaJugadores: List[Jugador],
     tablero: Tablero,
     mazo: Mazo,
-    turnoActual: Int
+    turnoActual: Int,
+    mensajeAlerta: String = ""
 ) {
   def inicializarPartida(): Juego = {
     var mazoActual = mazo.cartasRobo
@@ -99,31 +102,27 @@ case class Juego(
     this.copy(listaJugadores = jugadoresConCartas, mazo = Mazo(mazoActual, Nil))
   }
 
-  // --- NUEVA FUNCIÓN PURA PARA AVANZAR EL TURNO Y ROBAR ---
-  def avanzarTurnoYRobar(jugadorId: Int): Juego = {
+  def avanzarTurnoYRobar(jugadorId: Int, nuevoTablero: Tablero, cartaIdUsada: Int, alerta: String = ""): Juego = {
     val jugadorIndex = listaJugadores.indexWhere(_.id == jugadorId)
     if (jugadorIndex == -1) return this
 
     val jugadorActual = listaJugadores(jugadorIndex)
+    val jugadorSinCarta = jugadorActual.eliminarCartaDeMano(cartaIdUsada)
     
-    // Verificamos si quedan cartas en el mazo para robar
     val (nuevaMano, nuevoMazoRobo) = mazo.cartasRobo match {
-      case siguienteCarta :: restoDelMazo => 
-        // Si hay cartas, se le agrega a la mano actual
-        (jugadorActual.mano :+ siguienteCarta, restoDelMazo)
-      case Nil => 
-        // Si el mazo está vacío, la mano se queda como está (irá disminuyendo)
-        (jugadorActual.mano, Nil)
+      case siguienteCarta :: restoDelMazo => (jugadorSinCarta.mano :+ siguienteCarta, restoDelMazo)
+      case Nil => (jugadorSinCarta.mano, Nil)
     }
 
     val jugadorActualizado = jugadorActual.copy(mano = nuevaMano)
     val nuevaListaJugadores = listaJugadores.updated(jugadorIndex, jugadorActualizado)
 
-    // Devolvemos el nuevo estado del juego incrementando el contador de turnos
     this.copy(
+      tablero = nuevoTablero,
       listaJugadores = nuevaListaJugadores,
       mazo = Mazo(nuevoMazoRobo, mazo.cartasDescarte),
-      turnoActual = this.turnoActual + 1
+      turnoActual = this.turnoActual + 1,
+      mensajeAlerta = alerta
     )
   }
 }
@@ -134,20 +133,23 @@ object GeneradorMazo {
     
     val tuneles = (1 to 41).map { i =>
       val id = idSecuencia; idSecuencia += 1
-      CartaTunel(id, s"Túnel $i", arriba = true, abajo = true, izquierda = true, derecha = true, esCallejonSinSalida = false)
+      if (i <= 15) CartaTunel(id, "Túnel Cruz", true, true, true, true, false)
+      else if (i <= 25) CartaTunel(id, "Túnel Recto H", false, false, true, true, false)
+      else if (i <= 35) CartaTunel(id, "Túnel Recto V", true, true, false, false, false)
+      else CartaTunel(id, "Callejón Cruz X", true, true, true, true, true)
     }.toList
 
     val sabotajes = Herramienta.values.flatMap { h =>
       (1 to 3).map { _ =>
         val id = idSecuencia; idSecuencia += 1
-        CartaAccion(id, s"Sabotaje $h", TipoAccion.SABOTAJE(h))
+        CartaAccion(id, s"Sabotaje ($h)", TipoAccion.SABOTAJE(h))
       }
     }.toList
 
     val reparacionesIndividuales = Herramienta.values.flatMap { h =>
       (1 to 2).map { _ =>
         val id = idSecuencia; idSecuencia += 1
-        CartaAccion(id, s"Reparar $h", TipoAccion.REPARACION(List(h)))
+        CartaAccion(id, s"Reparar ($h)", TipoAccion.REPARACION(List(h)))
       }
     }.toList
 
@@ -170,8 +172,4 @@ object GeneradorMazo {
 
     Mazo(Random.shuffle(tuneles ++ sabotajes ++ reparacionesIndividuales ++ reparacionesHibridas ++ mapas ++ derrumbes), Nil)
   }
-}
-
-@main def probarLogicaJuego(): Unit = {
-  println("Lógica lista para usarse desde la Interfaz.")
 }

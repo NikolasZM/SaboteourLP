@@ -23,15 +23,14 @@ object InterfazJuego extends JFXApp3 {
 
   override def start(): Unit = {
     
-    // --- CREACIÓN DE LA ESCENA DEL MENÚ DE INICIO ---
+    //INICIO
     val layoutMenu = new VBox {
       spacing = 30
       alignment = Pos.Center
       prefWidth = 900
       prefHeight = 740
-      style = "-fx-background-color: #222222;" // Fondo gris oscuro
+      style = "-fx-background-color: #222222;"
 
-      // Título del juego
       val txtTitulo = new Text {
         text = "SABOTAJE"
         fill = Gold
@@ -44,20 +43,17 @@ object InterfazJuego extends JFXApp3 {
         font = Font.font("Arial", 18)
       }
 
-      // Botón Jugar
       val btnJugar = new Button("JUGAR") {
         prefWidth = 200
         prefHeight = 50
         style = "-fx-font-size: 18px; -fx-background-color: #2e7d32; -fx-text-fill: white; -fx-font-weight: bold; -fx-cursor: hand;"
         
-        // Al hacer clic, inicializa el juego y cambia la escena
         onAction = () => {
           inicializarLogicaJuego()
           stage.scene = crearEscenaJuego()
         }
       }
 
-      // Botón Salir
       val btnSalir = new Button("SALIR") {
         prefWidth = 200
         prefHeight = 50
@@ -73,7 +69,6 @@ object InterfazJuego extends JFXApp3 {
 
     val escenaMenu = new Scene(layoutMenu, 900, 740)
 
-    // El Stage arranca mostrando el menú principal
     stage = new JFXApp3.PrimaryStage {
       title = "Saboteur - Menú Principal"
       width = 900
@@ -82,7 +77,6 @@ object InterfazJuego extends JFXApp3 {
     }
   }
 
-  // --- FUNCIÓN PARA INICIALIZAR EL ESTADO LÓGICO ---
   def inicializarLogicaJuego(): Unit = {
     val mazoMezclado = GeneradorMazo.crearMazoMezclado()
     val jugador1 = Jugador(1, "Jugador 1", Rol.BUSCADOR, Nil)
@@ -112,7 +106,6 @@ object InterfazJuego extends JFXApp3 {
     estadoJuego = juegoBase.inicializarPartida()
   }
 
-  // --- FUNCIÓN PARA CONSTRUIR LA ESCENA DEL JUEGO PRINCIPAL ---
   def crearEscenaJuego(): Scene = {
     new Scene {
       fill = rgb(35, 35, 35)
@@ -121,7 +114,6 @@ object InterfazJuego extends JFXApp3 {
       def renderizar(): Unit = {
         contenedor.children.clear()
 
-        // 1. INDICADORES SUPERIORES
         val txtInfo = new Text {
           x = 20; y = 30
           text = s"TURNO: ${estadoJuego.turnoActual}  |  Mazo: ${estadoJuego.mazo.cartasRobo.size} cartas"
@@ -138,7 +130,6 @@ object InterfazJuego extends JFXApp3 {
           contenedor.children.add(txtAlerta)
         }
 
-        // 2. DIBUJAR TODO EL TABLERO DINÁMICO
         estadoJuego.tablero.cuadricula.foreach { case (pos, carta) =>
           val posX = pos.x * anchoCarta
           val posY = (pos.y * altoCarta) + offsetTableroY
@@ -187,7 +178,6 @@ object InterfazJuego extends JFXApp3 {
           contenedor.children.add(txtNombre)
         }
 
-        // 3. SEPARADOR PANEL DE LA MANO
         val lineaDivisoria = new Rectangle {
           x = 0; y = 560; width = 900; height = 4; fill = Gray
         }
@@ -196,7 +186,6 @@ object InterfazJuego extends JFXApp3 {
         }
         contenedor.children.addAll(lineaDivisoria, txtManoInfo)
 
-        // 4. DIBUJAR CARTAS DE LA MANO
         val jugadorActual = estadoJuego.listaJugadores.head
         jugadorActual.mano.zipWithIndex.foreach { case (carta, indice) =>
           val posX = 30 + (indice * 140)
@@ -233,7 +222,6 @@ object InterfazJuego extends JFXApp3 {
         }
       }
 
-      // CAPTURA DE CLICS EN EL TABLERO
       onMouseClicked = (event: MouseEvent) => {
         if (event.y > offsetTableroY && event.y < 550) {
           val logicoX = event.x.toInt / anchoCarta
@@ -259,7 +247,7 @@ object InterfazJuego extends JFXApp3 {
             case Some(cartaAccion: CartaAccion) if cartaAccion.tipoEfecto == TipoAccion.MAPA =>
               estadoJuego.tablero.cuadricula.get(posDestino) match {
                 case Some(cartaDestino) if cartaDestino.esMeta =>
-                  val queEs = if (cartaDestino.esOro) "¡¡ORO!! 💰" else "Carbón... 🪨"
+                  val queEs = if (cartaDestino.esOro) "¡¡ORO!!" else "Carbón."
                   val textoRevelador = s"La Meta en (${posDestino.x}, ${posDestino.y}) contiene: $queEs"
                   val jugadorActual = estadoJuego.listaJugadores.head
                   
@@ -271,7 +259,7 @@ object InterfazJuego extends JFXApp3 {
               }
 
             case Some(_: CartaAccion) =>
-              println("Acción no soportada en este objetivo.")
+              println("Acción no existe.")
             case None =>
               println("Selecciona primero una carta.")
           }

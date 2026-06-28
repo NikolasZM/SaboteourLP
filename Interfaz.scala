@@ -3,34 +3,96 @@
 import scalafx.application.JFXApp3
 import scalafx.scene.Scene
 import scalafx.scene.paint.Color.*
-import scalafx.scene.shape.{Rectangle, Line, Circle}
+import scalafx.scene.shape.Rectangle
 import scalafx.scene.layout.{Pane, VBox, HBox}
 import scalafx.scene.text.{Text, Font, FontWeight}
 import scalafx.scene.control.{Button, TextField, Label}
 import scalafx.scene.input.MouseEvent
+import scalafx.scene.image.{Image, ImageView}
 import scalafx.geometry.{Pos, Insets}
 import scalafx.Includes.*
 
 object InterfazJuego extends JFXApp3:
 
-  // ── Estado mutable de la UI (mínimo indispensable) ────────────────────────
-  var estadoJuego: Juego                  = _
-  var cartaSeleccionada: Option[Carta]    = None
-  var mensajeError: String                = ""
-  // Para cartas de acción que apuntan a un jugador (sabotaje/reparación)
+  // ── Estado mutable de la UI ───────────────────────────────────────────────
+  var estadoJuego: Juego                       = _
+  var cartaSeleccionada: Option[Carta]         = None
+  var mensajeError: String                     = ""
   var jugadorObjetivoSeleccionado: Option[Int] = None
 
-  // ── Dimensiones del tablero ───────────────────────────────────────────────
-  val anchoCarta   = 60
-  val altoCarta    = 80
-  val offsetY      = 55   // espacio para la barra de info superior
-  val altoPanelInf = 190  // altura del panel inferior (mano + controles)
-  val anchoVentana = 900
-  val altoVentana  = 780
+  // ── Dimensiones ───────────────────────────────────────────────────────────
+  // Las imágenes son 254×169 → relación ~1.5:1 (landscape)
+  // Ajusta anchoCarta/altoCarta si quieres cambiar el tamaño en el tablero
+  val anchoCarta     = 90    // tablero: ancho de cada celda
+  val altoCarta      = 60    // tablero: alto de cada celda
+  val anchoCartaMano = 127   // mano: misma relación 1.5:1
+  val altoCartaMano  = 85
+  val offsetY        = 55    // altura barra info superior
+  val altoPanelInf   = 210   // altura panel inferior
+  val anchoVentana   = 1100
+  val altoVentana    = 740
 
   // ── Estilos reutilizables ─────────────────────────────────────────────────
   def estiloBoton(color: String) =
     s"-fx-font-size: 14px; -fx-background-color: $color; -fx-text-fill: white; -fx-font-weight: bold; -fx-cursor: hand; -fx-background-radius: 6;"
+
+  // =========================================================================
+  //  MAPEO CARTA → ARCHIVO DE IMAGEN
+  //  Pon tus imágenes en la carpeta  images/  junto a los .scala
+  // =========================================================================
+  def nombreImagen(carta: Carta): String = carta match
+
+    // ── Cartas de túnel ──────────────────────────────────────────────────────
+    case t: CartaTunel if t.estaOculta         => "Carro.png"
+    case t: CartaTunel if t.esMeta && t.esOro  => "Carta_Oro.png"
+    case t: CartaTunel if t.esMeta             => "Carta_Carbon.png"
+    case t: CartaTunel => t.nombre match
+      case "Inicio"                     => "Carta_Escalera.png"
+      case "Cruce"                      => "Carta_Camino2.png"
+      case "Túnel Recto H"              => "Carta_Camino1.png"
+      case "Túnel Recto V"              => "Carta_Camino7.png"
+      case "Cruce en T (sin arriba)"    => "Carta_Camino3.png"
+      case "Cruce en T (sin abajo)"     => "Carta_Camino.png"
+      case "Cruce en T (sin izquierda)" => "Carta_Camino.png"
+      case "Cruce en T (sin derecha)"   => "Carta_Camino5.png"
+      case "Curva (arriba-derecha)"     => "Carta_Camino.png"
+      case "Curva (arriba-izquierda)"   => "Carta_Camino4.png"
+      case "Curva (abajo-derecha)"      => "Carta_Camino.png"
+      case "Curva (abajo-izquierda)"    => "Carta_Camino6.png"
+      case "Callejón (solo arriba)"     => "SinCamino.png"
+      case "Callejón (solo abajo)"      => "SinCamino9.png"
+      case "Callejón (solo izquierda)"  => "SinCamino7.png"
+      case "Callejón (solo derecha)"    => "SinCamino.png"
+      case _                            => "reverso.png"
+
+    // ── Cartas de acción ─────────────────────────────────────────────────────
+    case a: CartaAccion => a.tipoEfecto match
+      case TipoAccion.SABOTAJE(Herramienta.PICO)        => "Carta_PicoRoto.png"
+      case TipoAccion.SABOTAJE(Herramienta.CARRETILLA)  => "RomperCarro.png"
+      case TipoAccion.SABOTAJE(Herramienta.FAROL)       => "RomperFaro.png"
+      case TipoAccion.REPARACION(hs)
+        if hs.toSet == Set(Herramienta.PICO)                                  => "Pico.png"
+      case TipoAccion.REPARACION(hs)
+        if hs.toSet == Set(Herramienta.CARRETILLA)                            => "Carro.png"
+      case TipoAccion.REPARACION(hs)
+        if hs.toSet == Set(Herramienta.FAROL)                                 => "Faro.png"
+      case TipoAccion.REPARACION(hs)
+        if hs.toSet == Set(Herramienta.PICO, Herramienta.CARRETILLA)         => "PicoyCarro.png"
+      case TipoAccion.REPARACION(hs)
+        if hs.toSet == Set(Herramienta.PICO, Herramienta.FAROL)              => "PicoyFaro.png"
+      case TipoAccion.REPARACION(hs)
+        if hs.toSet == Set(Herramienta.CARRETILLA, Herramienta.FAROL)        => "FaroyCarro.png"
+      case TipoAccion.MAPA     => "Mapa.png"
+      case TipoAccion.DERRUMBE => "Derrumbe.png"
+      case _                   => "Faro.png"
+
+  // ── Crea un ImageView escalado al tamaño pedido ───────────────────────────
+  def crearImageView(carta: Carta, ancho: Double, alto: Double): ImageView =
+    val img = new Image(s"file:Imagenes/imagenes_redimensionadas/${nombreImagen(carta)}", ancho, alto, false, true)
+    new ImageView(img):
+      fitWidth      = ancho
+      fitHeight     = alto
+      preserveRatio = false
 
   // =========================================================================
   //  INICIO
@@ -89,7 +151,6 @@ object InterfazJuego extends JFXApp3:
         fill = Gold
         font = Font.font("Arial", FontWeight.Bold, 32)
 
-      // Campos de nombre para hasta 10 jugadores (mostramos 3 por defecto)
       var numJugadores = 3
 
       val camposNombre: List[TextField] = (1 to 10).map { i =>
@@ -106,7 +167,6 @@ object InterfazJuego extends JFXApp3:
         alignment = Pos.Center
         children  = camposNombre
 
-      // Botones - / +
       val btnMenos = new Button("−"):
         prefWidth  = 50
         prefHeight = 40
@@ -153,9 +213,9 @@ object InterfazJuego extends JFXApp3:
         onAction   = () =>
           val nombres = camposNombre.take(numJugadores).map(_.text.value.trim)
             .map(n => if n.isEmpty then "Jugador" else n)
-          estadoJuego       = FabricaJuego.crearJuego(nombres)
-          cartaSeleccionada = None
-          mensajeError      = ""
+          estadoJuego                 = FabricaJuego.crearJuego(nombres)
+          cartaSeleccionada           = None
+          mensajeError                = ""
           jugadorObjetivoSeleccionado = None
           stage.scene = crearEscenaJuego()
 
@@ -185,15 +245,12 @@ object InterfazJuego extends JFXApp3:
       contenedor.prefWidth  = anchoVentana
       contenedor.prefHeight = altoVentana
 
-      // ── Renderizado principal ───────────────────────────────────────────
       def renderizar(): Unit =
         contenedor.children.clear()
-
-        // Verificar fin de partida
         estadoJuego.estadoPartida match
-          case EstadoPartida.GanoBuscadores  => mostrarPantallaFin("¡¡LOS BUSCADORES GANARON!!", "¡Encontraron el oro!", Gold)
+          case EstadoPartida.GanoBuscadores   => mostrarPantallaFin("¡¡LOS BUSCADORES GANARON!!", "¡Encontraron el oro!", Gold)
           case EstadoPartida.GanoSaboteadores => mostrarPantallaFin("¡¡LOS SABOTEADORES GANARON!!", "El mazo se agotó sin llegar al oro.", Silver)
-          case EstadoPartida.EnCurso         => renderizarJuego()
+          case EstadoPartida.EnCurso          => renderizarJuego()
 
       def mostrarPantallaFin(titFin: String, subtitFin: String, colorTit: javafx.scene.paint.Color): Unit =
         contenedor.children.clear()
@@ -206,7 +263,6 @@ object InterfazJuego extends JFXApp3:
           fill = White
           font = Font.font("Arial", 20)
 
-        // Mostrar roles de cada jugador al final
         val txtRoles = estadoJuego.listaJugadores.map { j =>
           new Text(s"${j.nombre}: ${j.rol}"):
             fill = if j.rol == Rol.BUSCADOR then LightGreen else Crimson
@@ -232,16 +288,14 @@ object InterfazJuego extends JFXApp3:
 
         layout.prefWidth  = anchoVentana
         layout.prefHeight = altoVentana
-
-        // Centrar el VBox dentro del Pane
-        layout.layoutX = 0
-        layout.layoutY = 0
+        layout.layoutX    = 0
+        layout.layoutY    = 0
         contenedor.children.add(layout)
 
       def renderizarJuego(): Unit =
         val jugador = estadoJuego.jugadorActual
 
-        // ── Barra superior de info ────────────────────────────────────────
+        // ── Barra superior de info ──────────────────────────────────────────
         val fondoBarra = new Rectangle:
           x = 0; y = 0; width = anchoVentana; height = offsetY
           fill = rgb(20, 20, 20)
@@ -253,14 +307,13 @@ object InterfazJuego extends JFXApp3:
           font = Font.font("Arial", FontWeight.Bold, 14)
 
         val txtRol = new Text:
-          x = anchoVentana - 160; y = 25
+          x = anchoVentana - 180; y = 25
           text = s"ROL: ${jugador.rol}"
           fill = if jugador.rol == Rol.BUSCADOR then LightGreen else Crimson
           font = Font.font("Arial", FontWeight.Bold, 13)
 
-        // Herramientas rotas del jugador actual
         val txtHerramientas = new Text:
-          x = anchoVentana - 160; y = 45
+          x = anchoVentana - 180; y = 45
           text = if jugador.herramientasRotas.isEmpty then "✓ Sin bloqueos"
                  else s"✗ Roto: ${jugador.herramientasRotas.mkString(", ")}"
           fill = if jugador.herramientasRotas.isEmpty then LightGreen else Red
@@ -268,7 +321,7 @@ object InterfazJuego extends JFXApp3:
 
         contenedor.children.addAll(fondoBarra, txtTurno, txtRol, txtHerramientas)
 
-        // ── Mensaje de alerta / error ─────────────────────────────────────
+        // ── Mensajes de alerta / error ──────────────────────────────────────
         if estadoJuego.mensajeAlerta.nonEmpty then
           val txtAlerta = new Text:
             x = 10; y = offsetY + 18
@@ -279,92 +332,57 @@ object InterfazJuego extends JFXApp3:
 
         if mensajeError.nonEmpty then
           val txtErr = new Text:
-            x = 10; y = offsetY + 32
+            x = 10; y = offsetY + 33
             text = s"⚠ $mensajeError"
             fill = OrangeRed
             font = Font.font("Arial", 12)
           contenedor.children.add(txtErr)
 
-        // ── Tablero ───────────────────────────────────────────────────────
-        val inicioTableroY = offsetY + 40
+        // ── Tablero ─────────────────────────────────────────────────────────
+        val inicioTableroY = offsetY + 45
 
+        // Borde del área jugable
+        val bordeTablero = new Rectangle:
+          x = Tablero.limiteIzquierdo * anchoCarta
+          y = Tablero.limiteArriba * altoCarta + inicioTableroY
+          width  = (Tablero.limiteDerecho - Tablero.limiteIzquierdo + 1) * anchoCarta
+          height = (Tablero.limiteAbajo   - Tablero.limiteArriba    + 1) * altoCarta
+          fill        = Transparent
+          stroke      = rgb(80, 80, 80)
+          strokeWidth = 1
+        contenedor.children.add(bordeTablero)
+
+        // ── Renderizar cada carta del tablero como ImageView ────────────────
         estadoJuego.tablero.cuadricula.foreach { case (pos, carta) =>
           val px = pos.x * anchoCarta
           val py = pos.y * altoCarta + inicioTableroY
 
-          // Color de fondo de la carta
-          val colorFondo =
-            if pos == estadoJuego.tablero.posicionInicio then LightBlue
-            else if carta.esMeta then
-              if carta.estaOculta then rgb(80, 30, 30)
-              else if carta.esOro  then Gold
-              else                      DimGray
-            else SaddleBrown
-
-          val rect = new Rectangle:
-            x = px; y = py; width = anchoCarta; height = altoCarta
-            fill   = colorFondo
-            stroke = Black
-
-          contenedor.children.add(rect)
-
-          // Dibujar caminos si la carta no está oculta
-          if !carta.estaOculta then
-            val cx = px + anchoCarta / 2.0
-            val cy = py + altoCarta  / 2.0
-
-            def linea(x1: Double, y1: Double, x2: Double, y2: Double) =
-              new Line:
-                startX = x1; startY = y1; endX = x2; endY = y2
-                stroke      = if carta.esCallejonSinSalida then rgb(180, 50, 50) else LightGray
-                strokeWidth = 6
-
-            if carta.arriba    then contenedor.children.add(linea(cx, cy, cx, py))
-            if carta.abajo     then contenedor.children.add(linea(cx, cy, cx, py + altoCarta))
-            if carta.izquierda then contenedor.children.add(linea(cx, cy, px, cy))
-            if carta.derecha   then contenedor.children.add(linea(cx, cy, px + anchoCarta, cy))
-
-            if carta.esCallejonSinSalida then
-              val xMark = new Text:
-                x = cx - 5; y = cy + 5
-                text = "✖"; fill = Red; font = Font.font("Arial", FontWeight.Bold, 14)
-              contenedor.children.add(xMark)
-
-          // Etiqueta de la carta
-          val etiqueta =
-            if pos == estadoJuego.tablero.posicionInicio then "Inicio"
-            else if carta.esMeta then (if carta.estaOculta then "?" else if carta.esOro then "ORO" else "X")
-            else ""
-
-          if etiqueta.nonEmpty then
-            val txt = new Text:
-              x = px + 4; y = py + 14
-              text = etiqueta
-              fill = if pos == estadoJuego.tablero.posicionInicio then Black else White
-              font = Font.font("Arial", FontWeight.Bold, 11)
-            contenedor.children.add(txt)
+          val iv = crearImageView(carta, anchoCarta, altoCarta)
+          iv.layoutX = px
+          iv.layoutY = py
+          contenedor.children.add(iv)
         }
 
-        // ── Separador ─────────────────────────────────────────────────────
+        // ── Separador ───────────────────────────────────────────────────────
         val sepY = altoVentana - altoPanelInf
         val sep = new Rectangle:
           x = 0; y = sepY; width = anchoVentana; height = 3
           fill = DimGray
         contenedor.children.add(sep)
 
-        // ── Panel inferior: instrucciones + mano ──────────────────────────
+        // ── Panel inferior ──────────────────────────────────────────────────
         val fondoPanel = new Rectangle:
           x = 0; y = sepY + 3; width = anchoVentana; height = altoPanelInf
           fill = rgb(20, 20, 20)
         contenedor.children.add(fondoPanel)
 
-        // Instrucción contextual según carta seleccionada
+        // Instrucción contextual
         val instruccion = cartaSeleccionada match
-          case None                                                      => "Selecciona una carta de tu mano"
-          case Some(_: CartaTunel)                                       => "Haz clic en el tablero para colocar el túnel  |  [ESC] para cancelar"
-          case Some(a: CartaAccion) if a.tipoEfecto == TipoAccion.MAPA  => "Haz clic sobre una carta META para inspeccionarla  |  [ESC] cancelar"
+          case None                                                         => "Selecciona una carta de tu mano"
+          case Some(_: CartaTunel)                                          => "Haz clic en el tablero para colocar el túnel  |  [ESC] para cancelar"
+          case Some(a: CartaAccion) if a.tipoEfecto == TipoAccion.MAPA     => "Haz clic sobre una carta META para inspeccionarla  |  [ESC] cancelar"
           case Some(a: CartaAccion) if a.tipoEfecto == TipoAccion.DERRUMBE => "Haz clic en un túnel del tablero para derrumbarlo  |  [ESC] cancelar"
-          case Some(_: CartaAccion)                                      =>
+          case Some(_: CartaAccion) =>
             if jugadorObjetivoSeleccionado.isDefined then "Carta lista — haz clic en cualquier lugar del tablero para confirmar"
             else "Selecciona el jugador objetivo con los botones de abajo  |  [ESC] cancelar"
 
@@ -375,65 +393,49 @@ object InterfazJuego extends JFXApp3:
           font = Font.font("Arial", 12)
         contenedor.children.add(txtInstr)
 
-        // ── Mano del jugador ──────────────────────────────────────────────
-        val manoY = sepY + 30
+        // ── Mano del jugador: ImageView por cada carta ──────────────────────
+        val manoY   = sepY + 32
+        val espacio = anchoCartaMano + 13   // 13px de margen entre cartas
+
         jugador.mano.zipWithIndex.foreach { case (carta, i) =>
-          val cx = 10 + i * 132
+          val cx = 10 + i * espacio
           val cy = manoY
 
           val esSelec = cartaSeleccionada.exists(_.id == carta.id)
 
-          val colorCarta = carta match
-            case t: CartaTunel  => if t.esCallejonSinSalida then DarkGoldenrod else rgb(40, 100, 40)
-            case a: CartaAccion => a.tipoEfecto match
-              case TipoAccion.SABOTAJE(_)   => rgb(140, 20, 20)
-              case TipoAccion.REPARACION(_) => rgb(20, 80, 140)
-              case TipoAccion.MAPA          => rgb(80, 20, 140)
-              case TipoAccion.DERRUMBE      => rgb(120, 60, 20)
+          // Borde amarillo de selección (detrás de la imagen)
+          if esSelec then
+            val borde = new Rectangle:
+              x           = cx - 3
+              y           = cy - 3
+              width       = anchoCartaMano + 6
+              height      = altoCartaMano  + 6
+              fill        = Transparent
+              stroke      = Yellow
+              strokeWidth = 3
+              arcWidth    = 10
+              arcHeight   = 10
+            contenedor.children.add(borde)
 
-          val rectCarta = new Rectangle:
-            x = cx; y = cy; width = 125; height = 90
-            fill        = colorCarta
-            stroke      = if esSelec then Yellow else rgb(80, 80, 80)
-            strokeWidth = if esSelec then 3 else 1
-            arcWidth    = 8; arcHeight = 8
+          val iv = crearImageView(carta, anchoCartaMano, altoCartaMano)
+          iv.layoutX = cx
+          iv.layoutY = cy
 
-          rectCarta.onMouseClicked = (_: MouseEvent) =>
+          iv.onMouseClicked = (_: MouseEvent) =>
             cartaSeleccionada           = Some(carta)
             jugadorObjetivoSeleccionado = None
             mensajeError                = ""
             renderizar()
 
-          val txtNombre = new Text:
-            x = cx + 6; y = cy + 30
-            text = carta.nombre
-            fill = White
-            font = Font.font("Arial", FontWeight.Bold, 10)
-
-          // Mini-descripción de la carta
-          val descripcion = carta match
-            case t: CartaTunel  => if t.esCallejonSinSalida then "Bloquea caminos" else "Túnel"
-            case a: CartaAccion => a.tipoEfecto match
-              case TipoAccion.SABOTAJE(h)    => s"Rompe $h"
-              case TipoAccion.REPARACION(hs) => s"Repara ${hs.mkString("/")}"
-              case TipoAccion.MAPA           => "Ver meta oculta"
-              case TipoAccion.DERRUMBE       => "Elimina túnel"
-
-          val txtDesc = new Text:
-            x = cx + 6; y = cy + 50
-            text = descripcion
-            fill = LightGray
-            font = Font.font("Arial", 9)
-
-          contenedor.children.addAll(rectCarta, txtNombre, txtDesc)
+          contenedor.children.add(iv)
         }
 
-        // ── Botón descartar ───────────────────────────────────────────────
+        // ── Botón descartar ─────────────────────────────────────────────────
         val btnDescartar = new Button("DESCARTAR"):
-          layoutX = anchoVentana - 140
-          layoutY = manoY + 10
-          prefWidth  = 120
-          prefHeight = 35
+          layoutX    = anchoVentana - 150
+          layoutY    = manoY + 20
+          prefWidth  = 130
+          prefHeight = 38
           style      = estiloBoton("#555555")
           disable    = cartaSeleccionada.isEmpty
           onAction   = () =>
@@ -451,7 +453,7 @@ object InterfazJuego extends JFXApp3:
 
         contenedor.children.add(btnDescartar)
 
-        // ── Panel de jugadores (para sabotaje/reparación) ─────────────────
+        // ── Panel jugadores objetivo (sabotaje / reparación) ────────────────
         val necesitaObjetivo = cartaSeleccionada.exists {
           case a: CartaAccion => a.tipoEfecto match
             case TipoAccion.SABOTAJE(_) | TipoAccion.REPARACION(_) => true
@@ -461,7 +463,7 @@ object InterfazJuego extends JFXApp3:
 
         if necesitaObjetivo then
           val txtObjLabel = new Text:
-            x = 10; y = manoY + 105
+            x = 10; y = manoY + altoCartaMano + 22
             text = "Selecciona jugador objetivo:"
             fill = Yellow
             font = Font.font("Arial", FontWeight.Bold, 12)
@@ -471,7 +473,7 @@ object InterfazJuego extends JFXApp3:
             val esObjetivoSel = jugadorObjetivoSeleccionado.contains(j.id)
             val btnObj = new Button(s"${j.nombre}\n${j.herramientasRotas.mkString(",")}"):
               layoutX    = 10 + idx * 140
-              layoutY    = manoY + 115
+              layoutY    = manoY + altoCartaMano + 30
               prefWidth  = 130
               prefHeight = 50
               style      = estiloBoton(if esObjetivoSel then "#f57f17" else "#37474f")
@@ -481,19 +483,18 @@ object InterfazJuego extends JFXApp3:
             contenedor.children.add(btnObj)
           }
 
-      // ── Manejo de clics en el tablero ───────────────────────────────────
+      // ── Manejo de clics en el tablero ────────────────────────────────────
       contenedor.onMouseClicked = (event: MouseEvent) =>
-        val inicioTableroY = offsetY + 40
+        val inicioTableroY = offsetY + 45
         val enTablero      = event.y > inicioTableroY && event.y < (altoVentana - altoPanelInf)
 
         if enTablero then
-          val logicoX   = event.x.toInt / anchoCarta
-          val logicoY   = ((event.y - inicioTableroY) / altoCarta).toInt
+          val logicoX    = event.x.toInt / anchoCarta
+          val logicoY    = ((event.y - inicioTableroY) / altoCarta).toInt
           val posDestino = Posicion(logicoX, logicoY)
 
           cartaSeleccionada match
 
-            // Colocar túnel
             case Some(carta: CartaTunel) =>
               estadoJuego.colocarTunel(carta.id, posDestino) match
                 case ResultadoAccion.Exito(nuevoJuego, _) =>
@@ -504,7 +505,6 @@ object InterfazJuego extends JFXApp3:
                   mensajeError = razon
               renderizar()
 
-            // Usar lupa (mapa)
             case Some(carta: CartaAccion) if carta.tipoEfecto == TipoAccion.MAPA =>
               estadoJuego.usarMapa(carta.id, posDestino) match
                 case ResultadoAccion.Exito(nuevoJuego, _) =>
@@ -515,7 +515,6 @@ object InterfazJuego extends JFXApp3:
                   mensajeError = razon
               renderizar()
 
-            // Derrumbe
             case Some(carta: CartaAccion) if carta.tipoEfecto == TipoAccion.DERRUMBE =>
               estadoJuego.aplicarDerrumbe(carta.id, posDestino) match
                 case ResultadoAccion.Exito(nuevoJuego, _) =>
@@ -526,15 +525,14 @@ object InterfazJuego extends JFXApp3:
                   mensajeError = razon
               renderizar()
 
-            // Sabotaje/Reparación: confirmar con clic en tablero si ya hay objetivo
             case Some(carta: CartaAccion) =>
               jugadorObjetivoSeleccionado match
                 case None => mensajeError = "Primero selecciona el jugador objetivo abajo."
                 case Some(objId) =>
                   val resultado = carta.tipoEfecto match
                     case TipoAccion.SABOTAJE(_)   => estadoJuego.aplicarSabotaje(carta.id, objId)
-                    case TipoAccion.REPARACION(_)  => estadoJuego.aplicarReparacion(carta.id, objId)
-                    case _                         => ResultadoAccion.Error("Acción no reconocida.")
+                    case TipoAccion.REPARACION(_) => estadoJuego.aplicarReparacion(carta.id, objId)
+                    case _                        => ResultadoAccion.Error("Acción no reconocida.")
                   resultado match
                     case ResultadoAccion.Exito(nuevoJuego, _) =>
                       estadoJuego                 = nuevoJuego
@@ -549,7 +547,7 @@ object InterfazJuego extends JFXApp3:
               mensajeError = "Selecciona primero una carta de tu mano."
               renderizar()
 
-      // ── Tecla ESC para cancelar selección ──────────────────────────────
+      // ── Tecla ESC para cancelar selección ────────────────────────────────
       onKeyPressed = key =>
         if key.getCode.toString == "ESCAPE" then
           cartaSeleccionada           = None

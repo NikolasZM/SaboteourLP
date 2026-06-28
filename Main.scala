@@ -100,15 +100,27 @@ case class Posicion(x: Int, y: Int):
 //  TABLERO
 // ─────────────────────────────────────────────
 
+object Tablero:
+  // Área jugable: 9 columnas x 5 filas (coincide con inicio x=2 y metas x=10, y=1..5)
+  val limiteIzquierdo = 2
+  val limiteDerecho   = 10
+  val limiteArriba    = 1
+  val limiteAbajo     = 5
+
 case class Tablero(
     cuadricula: Map[Posicion, CartaTunel],
     posicionInicio: Posicion,
     posicionesMeta: List[Posicion]
 ):
-  // ── Validación corregida (AND, no OR) ─────────────────────────────────────
-  // Todos los vecinos existentes deben ser compatibles con la carta nueva.
+  // ── ¿La posición está dentro del área jugable de 9x5? ─────────────────────
+  def dentroDelTablero(pos: Posicion): Boolean =
+    pos.x >= Tablero.limiteIzquierdo && pos.x <= Tablero.limiteDerecho &&
+    pos.y >= Tablero.limiteArriba    && pos.y <= Tablero.limiteAbajo
+
+  // ── Validación: límites + vecino compatible + conectado de verdad al inicio ──
   def validarColocacion(pos: Posicion, carta: CartaTunel): Boolean =
-    if cuadricula.contains(pos) then return false
+    if cuadricula.contains(pos)     then return false
+    if !dentroDelTablero(pos)       then return false
 
     val vecinoArr = cuadricula.get(pos.arriba)
     val vecinoAba = cuadricula.get(pos.abajo)
@@ -125,33 +137,57 @@ case class Tablero(
     val validoIzq = vecinoIzq.forall(v => v.estaOculta || v.derecha    == carta.izquierda)
     val validoDer = vecinoDer.forall(v => v.estaOculta || v.izquierda  == carta.derecha)
 
-    validoArr && validoAba && validoIzq && validoDer
+    if !(validoArr && validoAba && validoIzq && validoDer) then return false
+
+    // ── Regla clave: al menos un lado abierto de la carta nueva debe tocar
+    //    una celda que esté REALMENTE conectada al inicio (no solo "presente").
+    //    Así, si un derrumbe corta el camino, el lado huérfano deja de aceptar cartas
+    //    hasta que alguien lo vuelva a unir a la red conectada al inicio.
+    val conectados = componenteConectadoDesdeInicio
+    (carta.arriba    && conectados.contains(pos.arriba))    ||
+    (carta.abajo     && conectados.contains(pos.abajo))     ||
+    (carta.izquierda && conectados.contains(pos.izquierda)) ||
+    (carta.derecha   && conectados.contains(pos.derecha))
 
   // ── Eliminar carta (Derrumbe) ─────────────────────────────────────────────
   def eliminarCarta(pos: Posicion): Option[Tablero] =
     if pos == posicionInicio || posicionesMeta.contains(pos) then None
     else cuadricula.get(pos).map(_ => this.copy(cuadricula = cuadricula - pos))
 
-  // ── Comprobar ruta al oro (BFS) ───────────────────────────────────────────
-  def hayRutaAlOro: Boolean =
-    posicionesMeta.exists { metaPos =>
-      cuadricula.get(metaPos).exists(m => m.esOro && !m.estaOculta && hayConexion(posicionInicio, metaPos))
+  // ── Metas ocultas a las que ya llega un camino conectado desde el inicio ──
+  // (independientemente de si son oro o carbón: con solo "llegar" se revelan)
+  def metasOcultasAlcanzables: List[Posicion] =
+    posicionesMeta.filter { p =>
+      cuadricula.get(p).exists(c => c.esMeta && c.estaOculta) && hayConexion(posicionInicio, p)
     }
 
-  def hayConexion(desde: Posicion, hasta: Posicion): Boolean =
-    def bfs(cola: List[Posicion], visitados: Set[Posicion]): Boolean =
+  // ── Revelar una meta concreta (queda visible para siempre, como en el juego real) ──
+  def revelarMeta(pos: Posicion): Tablero =
+    cuadricula.get(pos) match
+      case Some(c) => this.copy(cuadricula = cuadricula + (pos -> c.copy(estaOculta = false)))
+      case None    => this
+
+  // ── BFS genérico desde una posición, devuelve TODO lo alcanzable ──────────
+  private def bfsDesde(origen: Posicion): Set[Posicion] =
+    def bfs(cola: List[Posicion], visitados: Set[Posicion]): Set[Posicion] =
       cola match
-        case Nil => false
+        case Nil => visitados
         case actual :: resto =>
-          if actual == hasta then true
-          else if visitados.contains(actual) then bfs(resto, visitados)
+          if visitados.contains(actual) then bfs(resto, visitados)
           else
             val vecinos = cuadricula.get(actual)
               .map(c => vecinosConectados(actual, c))
               .getOrElse(Nil)
               .filterNot(visitados.contains)
             bfs(resto ++ vecinos, visitados + actual)
-    bfs(List(desde), Set.empty)
+    bfs(List(origen), Set.empty)
+
+  def hayConexion(desde: Posicion, hasta: Posicion): Boolean =
+    bfsDesde(desde).contains(hasta)
+
+  // ── Todas las posiciones realmente conectadas al inicio ahora mismo ──────
+  def componenteConectadoDesdeInicio: Set[Posicion] =
+    bfsDesde(posicionInicio)
 
   private def vecinosConectados(pos: Posicion, carta: CartaTunel): List[Posicion] =
     List(
@@ -231,17 +267,24 @@ case class Juego(
         else
           val nuevoTablero = tablero.copy(cuadricula = tablero.cuadricula + (pos -> carta))
 
-          // Si se alcanzó el oro, revelar la meta ganadora y terminar
+          // ── ¿El nuevo túnel conecta con alguna meta todavía oculta? ────────
+          // Si llega a una, se revela (oro o carbón). Si es oro, termina la partida.
+          val metasAlcanzadas = nuevoTablero.metasOcultasAlcanzables
+
           val (tableroFinal, msg, estado) =
-            if nuevoTablero.hayRutaAlOro then
-              val tableroConOroVisible = nuevoTablero.posicionesMeta.foldLeft(nuevoTablero) { (t, metaPos) =>
-                t.cuadricula.get(metaPos).filter(_.esOro) match
-                  case Some(meta) => t.copy(cuadricula = t.cuadricula + (metaPos -> meta.copy(estaOculta = false)))
-                  case None       => t
-              }
-              (tableroConOroVisible, s"¡¡${jugador.nombre} y los Buscadores encontraron el ORO!!", EstadoPartida.GanoBuscadores)
-            else
+            if metasAlcanzadas.isEmpty then
               (nuevoTablero, "", EstadoPartida.EnCurso)
+            else
+              val tableroRevelado = metasAlcanzadas.foldLeft(nuevoTablero)((t, p) => t.revelarMeta(p))
+              val metaOro = metasAlcanzadas.find(p => nuevoTablero.cuadricula.get(p).exists(_.esOro))
+
+              metaOro match
+                case Some(_) =>
+                  (tableroRevelado, s"¡¡${jugador.nombre} y los Buscadores encontraron el ORO!!", EstadoPartida.GanoBuscadores)
+                case None =>
+                  val descripciones = metasAlcanzadas.map(p => s"(${p.x},${p.y}) → Carbón")
+                  val mensajeRevelacion = s"${jugador.nombre} llegó a una meta falsa: ${descripciones.mkString(", ")}."
+                  (tableroRevelado, mensajeRevelacion, EstadoPartida.EnCurso)
 
           ResultadoAccion.Exito(avanzarTurno(jugador, cartaId, tableroFinal, estado, msg), msg)
 
@@ -390,11 +433,47 @@ object GeneradorMazo:
     val idIter = Iterator.from(1)
     def nextId(): Int = idIter.next()
 
-    val tuneles: List[CartaTunel] =
-      List.tabulate(15)(_ => CartaTunel(nextId(), "Túnel Cruz",      arriba=true,  abajo=true,  izquierda=true,  derecha=true,  esCallejonSinSalida=false)) ++
-      List.tabulate(10)(_ => CartaTunel(nextId(), "Túnel Recto H",   arriba=false, abajo=false, izquierda=true,  derecha=true,  esCallejonSinSalida=false)) ++
-      List.tabulate(10)(_ => CartaTunel(nextId(), "Túnel Recto V",   arriba=true,  abajo=true,  izquierda=false, derecha=false, esCallejonSinSalida=false)) ++
-      List.tabulate(6) (_ => CartaTunel(nextId(), "Callejón Cruz X", arriba=true,  abajo=true,  izquierda=true,  derecha=true,  esCallejonSinSalida=true))
+    val tuneles: List[CartaTunel] = List.concat(
+      // ── Cruce de 4 vías ──────────────────────────────────────────────────
+      List.tabulate(5) (_ => CartaTunel(nextId(), "Cruce",
+        arriba=true,  abajo=true,  izquierda=true,  derecha=true,  esCallejonSinSalida=false)),
+
+      // ── Rectas (2 vías opuestas) ─────────────────────────────────────────
+      List.tabulate(8) (_ => CartaTunel(nextId(), "Túnel Recto H",
+        arriba=false, abajo=false, izquierda=true,  derecha=true,  esCallejonSinSalida=false)),
+      List.tabulate(8) (_ => CartaTunel(nextId(), "Túnel Recto V",
+        arriba=true,  abajo=true,  izquierda=false, derecha=false, esCallejonSinSalida=false)),
+
+      // ── Cruces en T (3 vías) ─────────────────────────────────────────────
+      List.tabulate(4) (_ => CartaTunel(nextId(), "Cruce en T (sin arriba)",
+        arriba=false, abajo=true,  izquierda=true,  derecha=true,  esCallejonSinSalida=false)),
+      List.tabulate(4) (_ => CartaTunel(nextId(), "Cruce en T (sin abajo)",
+        arriba=true,  abajo=false, izquierda=true,  derecha=true,  esCallejonSinSalida=false)),
+      List.tabulate(4) (_ => CartaTunel(nextId(), "Cruce en T (sin izquierda)",
+        arriba=true,  abajo=true,  izquierda=false, derecha=true,  esCallejonSinSalida=false)),
+      List.tabulate(4) (_ => CartaTunel(nextId(), "Cruce en T (sin derecha)",
+        arriba=true,  abajo=true,  izquierda=true,  derecha=false, esCallejonSinSalida=false)),
+
+      // ── Curvas / codos (2 vías en ángulo recto) ─────────────────────────
+      List.tabulate(3) (_ => CartaTunel(nextId(), "Curva (arriba-derecha)",
+        arriba=true,  abajo=false, izquierda=false, derecha=true,  esCallejonSinSalida=false)),
+      List.tabulate(3) (_ => CartaTunel(nextId(), "Curva (arriba-izquierda)",
+        arriba=true,  abajo=false, izquierda=true,  derecha=false, esCallejonSinSalida=false)),
+      List.tabulate(3) (_ => CartaTunel(nextId(), "Curva (abajo-derecha)",
+        arriba=false, abajo=true,  izquierda=false, derecha=true,  esCallejonSinSalida=false)),
+      List.tabulate(3) (_ => CartaTunel(nextId(), "Curva (abajo-izquierda)",
+        arriba=false, abajo=true,  izquierda=true,  derecha=false, esCallejonSinSalida=false)),
+
+      // ── Callejones sin salida (1 sola vía: bloquean la ruta de verdad) ──
+      List.tabulate(2) (_ => CartaTunel(nextId(), "Callejón (solo arriba)",
+        arriba=true,  abajo=false, izquierda=false, derecha=false, esCallejonSinSalida=true)),
+      List.tabulate(2) (_ => CartaTunel(nextId(), "Callejón (solo abajo)",
+        arriba=false, abajo=true,  izquierda=false, derecha=false, esCallejonSinSalida=true)),
+      List.tabulate(2) (_ => CartaTunel(nextId(), "Callejón (solo izquierda)",
+        arriba=false, abajo=false, izquierda=true,  derecha=false, esCallejonSinSalida=true)),
+      List.tabulate(2) (_ => CartaTunel(nextId(), "Callejón (solo derecha)",
+        arriba=false, abajo=false, izquierda=false, derecha=true,  esCallejonSinSalida=true))
+    )
 
     val sabotajes: List[CartaAccion] =
       Herramienta.values.toList.flatMap(h =>
@@ -422,7 +501,7 @@ object GeneradorMazo:
       cartasRobo    = Random.shuffle(tuneles ++ sabotajes ++ reparacionesSimples ++ reparacionesDobles ++ mapas ++ derrumbes),
       cartasDescarte = Nil
     )
-
+    
 // ─────────────────────────────────────────────
 //  FACTORY: construir juego inicial
 // ─────────────────────────────────────────────

@@ -1,0 +1,9 @@
+# Carpetas generadas al compilar Scala
+.scala-build/
+.bsp/
+.metals/
+target/
+out/
+
+# Carpeta de configuración local de VS Code
+.vscode/

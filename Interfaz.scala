@@ -127,7 +127,7 @@ object InterfazJuego extends JFXApp3:
   // =========================================================================
   override def start(): Unit =
     stage = new JFXApp3.PrimaryStage:
-      title  = "Saboteur — En busca del oro"
+      title  = "Sabotaje — En busca del oro oristico"
       width  = anchoVentana
       height = altoVentana
       scene  = crearEscenaMenu()
@@ -143,7 +143,7 @@ object InterfazJuego extends JFXApp3:
         fill = Gold
         font = Font.font("Arial", FontWeight.Bold, 72)
 
-      val subtitulo = new Text("En busca del oro"):
+      val subtitulo = new Text("En busca del oro oristico"):
         fill = LightGray
         font = Font.font("Arial", FontWeight.Light, 20)
 

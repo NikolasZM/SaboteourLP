@@ -6,7 +6,7 @@ import scalafx.scene.paint.Color.*
 import scalafx.scene.shape.Rectangle
 import scalafx.scene.layout.{Pane, VBox, HBox}
 import scalafx.scene.text.{Text, Font, FontWeight}
-import scalafx.scene.control.{Button, TextField, Label}
+import scalafx.scene.control.{Button, TextField, Label, ScrollPane}
 import scalafx.scene.input.MouseEvent
 import scalafx.scene.image.{Image, ImageView}
 import scalafx.geometry.{Pos, Insets}
@@ -721,9 +721,18 @@ object InterfazJuego extends JFXApp3:
             font = Font.font("Arial", FontWeight.Bold, 12)
           contenedor.children.add(txtAlerta)
 
+        // Mensaje privado (solo visible al jugador que lo generó, ej: resultado Lupa/Mapa)
+        if estado.juego.mensajePrivado.nonEmpty then
+          val txtPrivado = new Text:
+            x = 10; y = offsetY + 33
+            text = s"🔍 ${estado.juego.mensajePrivado}"
+            fill = Cyan
+            font = Font.font("Arial", FontWeight.Bold, 12)
+          contenedor.children.add(txtPrivado)
+
         if estado.mensajeError.nonEmpty then
           val txtErr = new Text:
-            x = 10; y = offsetY + 33
+            x = 10; y = offsetY + (if estado.juego.mensajePrivado.nonEmpty then 48 else 33)
             text = s"⚠ ${estado.mensajeError}"
             fill = OrangeRed
             font = Font.font("Arial", 12)

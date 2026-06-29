@@ -241,7 +241,10 @@ case class Juego(
     turnoActual: Int,
     indiceJugadorActual: Int = 0,
     estadoPartida: EstadoPartida = EstadoPartida.EnCurso,
-    mensajeAlerta: String = ""
+    mensajeAlerta: String = "",
+    // Mensaje solo para el jugador que actuó (ej: resultado Mapa/Lupa).
+    // El servidor lo limpia antes de retransmitir el estado a los demás clientes.
+    mensajePrivado: String = ""
 ):
   def jugadorActual: Jugador = listaJugadores(indiceJugadorActual)
 
@@ -319,9 +322,10 @@ case class Juego(
                   ResultadoAccion.Error(s"${objetivo.nombre} ya tiene roto el $herramienta.")
                 else
                   val objetivoActualizado = objetivo.romperHerramienta(herramienta)
-                  val nuevosJugadores = listaJugadores.map(j => if j.id == jugadorObjetivoId then objetivoActualizado else j)
                   val msg = s"¡${jugador.nombre} saboteó el $herramienta de ${objetivo.nombre}!"
                   val juegoBase = avanzarTurno(jugador, cartaId, tablero, EstadoPartida.EnCurso, msg)
+                  // Aplicar el cambio de herramienta sobre juegoBase (ya tiene la carta eliminada y nueva robada)
+                  val nuevosJugadores = juegoBase.listaJugadores.map(j => if j.id == jugadorObjetivoId then objetivoActualizado else j)
                   ResultadoAccion.Exito(juegoBase.copy(listaJugadores = nuevosJugadores), msg)
           case _ => ResultadoAccion.Error("Esa carta no es de sabotaje.")
 
@@ -339,9 +343,10 @@ case class Juego(
                 objetivo.repararHerramienta(herramientas) match
                   case None => ResultadoAccion.Error(s"${objetivo.nombre} no tiene ninguna de esas herramientas rotas.")
                   case Some(objetivoReparado) =>
-                    val nuevosJugadores = listaJugadores.map(j => if j.id == jugadorObjetivoId then objetivoReparado else j)
                     val msg = s"${jugador.nombre} reparó una herramienta de ${objetivo.nombre}."
                     val juegoBase = avanzarTurno(jugador, cartaId, tablero, EstadoPartida.EnCurso, msg)
+                    // Aplicar la reparación sobre juegoBase (ya tiene la carta eliminada y nueva robada)
+                    val nuevosJugadores = juegoBase.listaJugadores.map(j => if j.id == jugadorObjetivoId then objetivoReparado else j)
                     ResultadoAccion.Exito(juegoBase.copy(listaJugadores = nuevosJugadores), msg)
           case _ => ResultadoAccion.Error("Esa carta no es de reparación.")
 
@@ -359,8 +364,12 @@ case class Juego(
                 ResultadoAccion.Error("La lupa solo se puede usar sobre una carta de meta.")
               case Some(cartaMeta) =>
                 val contenido = if cartaMeta.esOro then "¡¡ORO!!" else "Carbón."
-                val msg = s"[Solo ${jugador.nombre}] Meta (${posicionMeta.x},${posicionMeta.y}): $contenido"
-                ResultadoAccion.Exito(avanzarTurno(jugador, cartaId, tablero, EstadoPartida.EnCurso, msg), msg)
+                // msgPublico informa a todos que alguien usó la lupa (sin revelar el contenido).
+                // msgPrivado solo llega al jugador que la usó (ver red.scala).
+                val msgPublico  = s"${jugador.nombre} usó la Lupa en (${posicionMeta.x},${posicionMeta.y})."
+                val msgPrivado  = s"[Solo tú] Meta (${posicionMeta.x},${posicionMeta.y}): $contenido"
+                val juegoAvanzado = avanzarTurno(jugador, cartaId, tablero, EstadoPartida.EnCurso, msgPublico)
+                ResultadoAccion.Exito(juegoAvanzado.copy(mensajePrivado = msgPrivado), msgPrivado)
           case _ => ResultadoAccion.Error("Esa carta no es de mapa.")
 
   // ── Derrumbe ──────────────────────────────────────────────────────────────

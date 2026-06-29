@@ -123,7 +123,14 @@ class ServidorJuego(puerto: Int, juegoInicial: Juego):
       resultado match
         case ResultadoAccion.Exito(nuevoJuego, _) =>
           estadoActual = nuevoJuego
-          clientesMap.values.foreach(_ ! EstadoJuegoMsg(nuevoJuego))
+          // El mensajePrivado (ej: resultado de la Lupa) solo va al jugador que actuó.
+          // A los demás clientes se les manda el juego con ese campo limpio.
+          val juegoSinPrivado = nuevoJuego.copy(mensajePrivado = "")
+          clientesMap.foreach { case (clienteId, ref) =>
+            if clienteId == jugadorId then ref ! EstadoJuegoMsg(nuevoJuego)
+            else                            ref ! EstadoJuegoMsg(juegoSinPrivado)
+          }
+          // El host recibe el estado completo (con mensajePrivado si corresponde).
           if notificarHostUI then onEstadoCambiadoHost.foreach(_(nuevoJuego))
         case _ => ()
       resultado

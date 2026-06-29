@@ -413,7 +413,8 @@ case class Juego(
             turnoActual         = turnoActual + 1,
             indiceJugadorActual = siguienteIndice,
             estadoPartida       = nuevoEstado,
-            mensajeAlerta       = msg
+            mensajeAlerta       = msg,
+            mensajePrivado      = ""   // limpiar: si no, queda "pegado" y se filtra en turnos futuros
           ),
           msg
         )
@@ -445,7 +446,8 @@ case class Juego(
       turnoActual         = turnoActual + 1,
       indiceJugadorActual = siguienteIndice,
       estadoPartida       = estadoFinal,
-      mensajeAlerta       = alerta
+      mensajeAlerta       = alerta,
+      mensajePrivado      = ""   // limpiar: si no, queda "pegado" y se filtra en turnos futuros
     )
 
 // ─────────────────────────────────────────────

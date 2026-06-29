@@ -130,8 +130,11 @@ class ServidorJuego(puerto: Int, juegoInicial: Juego):
             if clienteId == jugadorId then ref ! EstadoJuegoMsg(nuevoJuego)
             else                            ref ! EstadoJuegoMsg(juegoSinPrivado)
           }
-          // El host recibe el estado completo (con mensajePrivado si corresponde).
-          if notificarHostUI then onEstadoCambiadoHost.foreach(_(nuevoJuego))
+          // El host recibe el estado completo SOLO si fue el host quien actuó.
+          // Si actuó un cliente, el host es "otro jugador" y debe ver la versión limpia.
+          if notificarHostUI then
+            val juegoParaHost = if jugadorId == hostId then nuevoJuego else juegoSinPrivado
+            onEstadoCambiadoHost.foreach(_(juegoParaHost))
         case _ => ()
       resultado
     }

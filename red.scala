@@ -11,7 +11,6 @@ import com.typesafe.config.ConfigFactory
 // ─────────────────────────────────────────────
 //  MENSAJES DE RED (ADT Inmutable y Serializable)
 // ─────────────────────────────────────────────
-// Agregamos java.io.Serializable para que Pekko envíe objetos reales por la red LAN
 sealed trait MensajeRed extends java.io.Serializable
 
 // Cliente → Host
@@ -19,7 +18,7 @@ case class AccionColocarTunel(cartaId: Int, posX: Int, posY: Int, voltear: Boole
 case class AccionSabotaje(cartaId: Int, objetivoId: Int)                             extends MensajeRed
 case class AccionReparacion(cartaId: Int, objetivoId: Int)                           extends MensajeRed
 case class AccionMapa(cartaId: Int, posX: Int, posY: Int)                            extends MensajeRed
-case class AccionDerrumbe(cartaId: Int, posX: Int, posY: Int)                        extends MensajeRed
+case class AccionDerrumbe(cartaId: Int, posX: Int, posY: Int)                         extends MensajeRed
 case class AccionDescartar(cartaId: Int)                                             extends MensajeRed
 
 // Host → Clientes
@@ -28,9 +27,8 @@ case class ErrorMsg(razon: String)         extends MensajeRed
 case class BienvenidaMsg(jugadorId: Int)   extends MensajeRed
 
 // ─────────────────────────────────────────────
-//  MOTOR DE ACCIONES (Idéntico al original)
+//  MOTOR DE ACCIONES
 // ─────────────────────────────────────────────
-// Mantenemos esta función pura intacta para que la interfaz la use localmente
 def aplicarAccionAJuego(juego: Juego, msg: MensajeRed, jugadorId: Int): ResultadoAccion =
   if juego.jugadorActual.id != jugadorId then
     ResultadoAccion.Error(s"No es tu turno (turno de ${juego.jugadorActual.nombre}).")
@@ -44,7 +42,7 @@ def aplicarAccionAJuego(juego: Juego, msg: MensajeRed, jugadorId: Int): Resultad
     case _                                   => ResultadoAccion.Error("Mensaje no reconocido.")
 
 // ─────────────────────────────────────────────
-//  CONTEXTO DE RED PARA LA UI (Idéntico)
+//  CONTEXTO DE RED PARA LA UI
 // ─────────────────────────────────────────────
 case class ContextoRed(
   miId:     Int,
@@ -53,7 +51,7 @@ case class ContextoRed(
 )
 
 // ─────────────────────────────────────────────
-//  SERVIDOR (HOST) — AHORA CON ACTORES PEKKO
+//  SERVIDOR (HOST) — CORREGIDO
 // ─────────────────────────────────────────────
 class ServidorJuego(puerto: Int, juegoInicial: Juego):
 
@@ -74,21 +72,27 @@ class ServidorJuego(puerto: Int, juegoInicial: Juego):
   def estadoActualSnapshot: Juego = estadoActual
 
   def iniciar(onClienteConectado: Int => Unit): Unit =
+    // Corregido: Se estructuró usando saltos de línea estándar en lugar de ';'
     val config = ConfigFactory.parseString(s"""
       pekko {
-        actor { provider = remote; allow-java-serialization = on }
-        remote.artery { transport = tcp; canonical.hostname = "$ipLocal"; canonical.port = $puerto }
+        actor {
+          provider = remote
+          allow-java-serialization = on
+        }
+        remote.artery {
+          transport = tcp
+          canonical.hostname = "$ipLocal"
+          canonical.port = $puerto
+        }
       }
     """)
     val sys = ActorSystem("SistemaSaboteurHost", config)
     this.sistema = Some(sys)
 
-    // Definición interna del Actor del Servidor para procesar mensajes concurrentes
     class ActorServidorInternal extends Actor:
       def receive: Receive =
         case "SolicitudUnirse" =>
           val clienteRef = sender()
-          // Buscamos el siguiente ID disponible para asignar
           val idAsignado = juegoInicial.listaJugadores
             .map(_.id)
             .filterNot(_ == hostId)
@@ -102,7 +106,6 @@ class ServidorJuego(puerto: Int, juegoInicial: Juego):
             Platform.runLater { onClienteConectado(idAsignado) }
 
         case msg: MensajeRed =>
-          // Identificamos quién envió el mensaje por su dirección de Actor (sender)
           clientesMap.find(_._2 == sender()).map(_._1).foreach { id =>
             Platform.runLater {
               procesarAccionHost(msg, id, notificarHostUI = true) match
@@ -121,7 +124,6 @@ class ServidorJuego(puerto: Int, juegoInicial: Juego):
       resultado match
         case ResultadoAccion.Exito(nuevoJuego, _) =>
           estadoActual = nuevoJuego
-          // Transmitimos de forma reactiva el nuevo estado a todos los actores clientes
           clientesMap.values.foreach(_ ! EstadoJuegoMsg(nuevoJuego))
           if notificarHostUI then onEstadoCambiadoHost.foreach(_(nuevoJuego))
         case _ => ()
@@ -129,7 +131,7 @@ class ServidorJuego(puerto: Int, juegoInicial: Juego):
     }
 
 // ─────────────────────────────────────────────
-//  CLIENTE — AHORA CON ACTORES PEKKO
+//  CLIENTE — CORREGIDO
 // ─────────────────────────────────────────────
 class ClienteJuego(host: String, puerto: Int):
 
@@ -143,18 +145,24 @@ class ClienteJuego(host: String, puerto: Int):
     this.manejadorMensaje = onMensaje
     this.manejadorError = onError
 
+    // Corregido: Se estructuró usando saltos de línea estándar en lugar de ';'
     val config = ConfigFactory.parseString("""
       pekko {
-        actor { provider = remote; allow-java-serialization = on }
-        remote.artery { transport = tcp; canonical.hostname = "127.0.0.1"; canonical.port = 0 }
+        actor {
+          provider = remote
+          allow-java-serialization = on
+        }
+        remote.artery {
+          transport = tcp
+          canonical.hostname = "127.0.0.1"
+          canonical.port = 0
+        }
       }
     """)
     val sys = ActorSystem("SistemaSaboteurCliente", config)
     this.sistema = Some(sys)
 
-    // Definición interna del Actor Cliente
     class ActorClienteInternal extends Actor:
-      // Apuntamos remotamente a la dirección del buzón del Servidor
       private val servidorSelection = context.actorSelection(s"pekko://SistemaSaboteurHost@$host:$puerto/user/servidor")
 
       override def preStart(): Unit =

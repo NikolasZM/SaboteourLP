@@ -309,46 +309,58 @@ case class Juego(
 
   // ── Sabotaje ──────────────────────────────────────────────────────────────
   def aplicarSabotaje(cartaId: Int, jugadorObjetivoId: Int): ResultadoAccion =
-    val jugador = jugadorActual
-    jugador.mano.collectFirst { case c: CartaAccion if c.id == cartaId => c } match
-      case None => ResultadoAccion.Error("Esa carta de acción no está en tu mano.")
-      case Some(carta) =>
-        carta.tipoEfecto match
-          case TipoAccion.SABOTAJE(herramienta) =>
-            listaJugadores.find(_.id == jugadorObjetivoId) match
-              case None => ResultadoAccion.Error("Jugador objetivo no encontrado.")
-              case Some(objetivo) =>
-                if objetivo.herramientasRotas.contains(herramienta) then
-                  ResultadoAccion.Error(s"${objetivo.nombre} ya tiene roto el $herramienta.")
-                else
-                  val objetivoActualizado = objetivo.romperHerramienta(herramienta)
-                  val msg = s"¡${jugador.nombre} saboteó el $herramienta de ${objetivo.nombre}!"
-                  val juegoBase = avanzarTurno(jugador, cartaId, tablero, EstadoPartida.EnCurso, msg)
-                  // Aplicar el cambio de herramienta sobre juegoBase (ya tiene la carta eliminada y nueva robada)
-                  val nuevosJugadores = juegoBase.listaJugadores.map(j => if j.id == jugadorObjetivoId then objetivoActualizado else j)
-                  ResultadoAccion.Exito(juegoBase.copy(listaJugadores = nuevosJugadores), msg)
-          case _ => ResultadoAccion.Error("Esa carta no es de sabotaje.")
+      val jugador = jugadorActual
+      jugador.mano.collectFirst { case c: CartaAccion if c.id == cartaId => c } match
+        case None => ResultadoAccion.Error("Esa carta de acción no está en tu mano.")
+        case Some(carta) =>
+          carta.tipoEfecto match
+            case TipoAccion.SABOTAJE(herramienta) =>
+              listaJugadores.find(_.id == jugadorObjetivoId) match
+                case None => ResultadoAccion.Error("Jugador objetivo no encontrado.")
+                case Some(objetivo) =>
+                  if objetivo.herramientasRotas.contains(herramienta) then
+                    ResultadoAccion.Error(s"${objetivo.nombre} ya tiene roto el $herramienta.")
+                  else
+                    val msg = s"¡${jugador.nombre} saboteó el $herramienta de ${objetivo.nombre}!"
+                    
+                    // 1. Avanzamos el turno PRIMERO (esto quita la carta de la mano del jugador actual)
+                    val juegoBase = avanzarTurno(jugador, cartaId, tablero, EstadoPartida.EnCurso, msg)
+                    
+                    // 2. Aplicamos la rotura sobre el jugador extraído de juegoBase, no del objetivo viejo
+                    val nuevosJugadores = juegoBase.listaJugadores.map { j => 
+                      if j.id == jugadorObjetivoId then j.romperHerramienta(herramienta) 
+                      else j
+                    }
+                    ResultadoAccion.Exito(juegoBase.copy(listaJugadores = nuevosJugadores), msg)
+            case _ => ResultadoAccion.Error("Esa carta no es de sabotaje.")
 
   // ── Reparación ────────────────────────────────────────────────────────────
   def aplicarReparacion(cartaId: Int, jugadorObjetivoId: Int): ResultadoAccion =
-    val jugador = jugadorActual
-    jugador.mano.collectFirst { case c: CartaAccion if c.id == cartaId => c } match
-      case None => ResultadoAccion.Error("Esa carta de acción no está en tu mano.")
-      case Some(carta) =>
-        carta.tipoEfecto match
-          case TipoAccion.REPARACION(herramientas) =>
-            listaJugadores.find(_.id == jugadorObjetivoId) match
-              case None => ResultadoAccion.Error("Jugador objetivo no encontrado.")
-              case Some(objetivo) =>
-                objetivo.repararHerramienta(herramientas) match
-                  case None => ResultadoAccion.Error(s"${objetivo.nombre} no tiene ninguna de esas herramientas rotas.")
-                  case Some(objetivoReparado) =>
-                    val msg = s"${jugador.nombre} reparó una herramienta de ${objetivo.nombre}."
-                    val juegoBase = avanzarTurno(jugador, cartaId, tablero, EstadoPartida.EnCurso, msg)
-                    // Aplicar la reparación sobre juegoBase (ya tiene la carta eliminada y nueva robada)
-                    val nuevosJugadores = juegoBase.listaJugadores.map(j => if j.id == jugadorObjetivoId then objetivoReparado else j)
-                    ResultadoAccion.Exito(juegoBase.copy(listaJugadores = nuevosJugadores), msg)
-          case _ => ResultadoAccion.Error("Esa carta no es de reparación.")
+      val jugador = jugadorActual
+      jugador.mano.collectFirst { case c: CartaAccion if c.id == cartaId => c } match
+        case None => ResultadoAccion.Error("Esa carta de acción no está en tu mano.")
+        case Some(carta) =>
+          carta.tipoEfecto match
+            case TipoAccion.REPARACION(herramientas) =>
+              listaJugadores.find(_.id == jugadorObjetivoId) match
+                case None => ResultadoAccion.Error("Jugador objetivo no encontrado.")
+                case Some(objetivo) =>
+                  // Solo usamos este match para validar si tiene herramientas rotas que reparar
+                  objetivo.repararHerramienta(herramientas) match
+                    case None => ResultadoAccion.Error(s"${objetivo.nombre} no tiene ninguna de esas herramientas rotas.")
+                    case Some(_) =>
+                      val msg = s"${jugador.nombre} reparó una herramienta de ${objetivo.nombre}."
+                      
+                      // 1. Avanzamos el turno PRIMERO
+                      val juegoBase = avanzarTurno(jugador, cartaId, tablero, EstadoPartida.EnCurso, msg)
+                      
+                      // 2. Aplicamos la reparación sobre el jugador extraído de juegoBase
+                      val nuevosJugadores = juegoBase.listaJugadores.map { j => 
+                        if j.id == jugadorObjetivoId then j.repararHerramienta(herramientas).getOrElse(j) 
+                        else j
+                      }
+                      ResultadoAccion.Exito(juegoBase.copy(listaJugadores = nuevosJugadores), msg)
+            case _ => ResultadoAccion.Error("Esa carta no es de reparación.")
 
   // ── Mapa (Lupa) ───────────────────────────────────────────────────────────
   def usarMapa(cartaId: Int, posicionMeta: Posicion): ResultadoAccion =

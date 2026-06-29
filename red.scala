@@ -51,7 +51,7 @@ case class ContextoRed(
 )
 
 // ─────────────────────────────────────────────
-//  SERVIDOR (HOST) — CORREGIDO
+//  SERVIDOR (HOST)
 // ─────────────────────────────────────────────
 class ServidorJuego(puerto: Int, juegoInicial: Juego):
 
@@ -72,7 +72,6 @@ class ServidorJuego(puerto: Int, juegoInicial: Juego):
   def estadoActualSnapshot: Juego = estadoActual
 
   def iniciar(onClienteConectado: Int => Unit): Unit =
-    // Corregido: Se estructuró usando saltos de línea estándar en lugar de ';'
     val config = ConfigFactory.parseString(s"""
       pekko {
         actor {
@@ -131,7 +130,7 @@ class ServidorJuego(puerto: Int, juegoInicial: Juego):
     }
 
 // ─────────────────────────────────────────────
-//  CLIENTE — CORREGIDO
+//  CLIENTE — MODIFICADO PARA LAN
 // ─────────────────────────────────────────────
 class ClienteJuego(host: String, puerto: Int):
 
@@ -141,12 +140,16 @@ class ClienteJuego(host: String, puerto: Int):
   @volatile private var manejadorMensaje: MensajeRed => Unit = _ => ()
   @volatile private var manejadorError:   String => Unit     = _ => ()
 
+  // Ahora el cliente también detecta su propia IP de Wi-Fi para que el Host sepa cómo responderle
+  def ipLocal: String =
+    Try(InetAddress.getLocalHost.getHostAddress).getOrElse("127.0.0.1")
+
   def conectar(onMensaje: MensajeRed => Unit, onError: String => Unit): Unit =
     this.manejadorMensaje = onMensaje
     this.manejadorError = onError
 
-    // Corregido: Se estructuró usando saltos de línea estándar en lugar de ';'
-    val config = ConfigFactory.parseString("""
+    // Corregido: canonical.hostname ahora usa la IP real del cliente en el Wi-Fi
+    val config = ConfigFactory.parseString(s"""
       pekko {
         actor {
           provider = remote
@@ -154,7 +157,7 @@ class ClienteJuego(host: String, puerto: Int):
         }
         remote.artery {
           transport = tcp
-          canonical.hostname = "127.0.0.1"
+          canonical.hostname = "$ipLocal"
           canonical.port = 0
         }
       }

@@ -466,51 +466,51 @@ object GeneradorMazo:
         arriba=true,  abajo=true,  izquierda=true,  derecha=true,  esCallejonSinSalida=false)),
 
       // ── Rectas (simétricas al girar 180°, no se giran) ───────────────────
-      List.tabulate(8) (_ => CartaTunel(nextId(), "Túnel Recto H",
+      List.tabulate(3) (_ => CartaTunel(nextId(), "Túnel Recto H",
         arriba=false, abajo=false, izquierda=true,  derecha=true,  esCallejonSinSalida=false)),
-      List.tabulate(8) (_ => CartaTunel(nextId(), "Túnel Recto V",
+      List.tabulate(4) (_ => CartaTunel(nextId(), "Túnel Recto V",
         arriba=true,  abajo=true,  izquierda=false, derecha=false, esCallejonSinSalida=false)),
 
       // ── Cruces en T: 2 tipos, volteables 180° ─────────────────────────────
       // "sin arriba"  girado 180° → queda "sin abajo"      (imagen: Carta_Camino3)
-      List.tabulate(8) (_ => CartaTunel(nextId(), "Cruce en T (sin arriba)",
+      List.tabulate(5) (_ => CartaTunel(nextId(), "Cruce en T (sin arriba)",
         arriba=false, abajo=true,  izquierda=true,  derecha=true,  esCallejonSinSalida=false)),
       // "sin derecha" girado 180° → queda "sin izquierda"  (imagen: Carta_Camino5)
-      List.tabulate(8) (_ => CartaTunel(nextId(), "Cruce en T (sin derecha)",
+      List.tabulate(5) (_ => CartaTunel(nextId(), "Cruce en T (sin derecha)",
         arriba=true,  abajo=true,  izquierda=true,  derecha=false, esCallejonSinSalida=false)),
 
       // ── Codos: 2 tipos, volteables 180° ──────────────────────────────────
       // "arriba-izq"  girado 180° → queda "abajo-der"      (imagen: Carta_Camino4)
-      List.tabulate(6) (_ => CartaTunel(nextId(), "Curva (arriba-izquierda)",
+      List.tabulate(4) (_ => CartaTunel(nextId(), "Curva (arriba-izquierda)",
         arriba=true,  abajo=false, izquierda=true,  derecha=false, esCallejonSinSalida=false)),
       // "abajo-izq"   girado 180° → queda "arriba-der"     (imagen: Carta_Camino6)
-      List.tabulate(6) (_ => CartaTunel(nextId(), "Curva (abajo-izquierda)",
+      List.tabulate(5) (_ => CartaTunel(nextId(), "Curva (abajo-izquierda)",
         arriba=false, abajo=true,  izquierda=true,  derecha=false, esCallejonSinSalida=false)),
 
       // ── Callejones con 1 vía: 2 tipos, volteables 180° ───────────────────
       // "solo izquierda" girado 180° → queda "solo derecha"  (imagen: SinCamino7)
-      List.tabulate(4) (_ => CartaTunel(nextId(), "Callejón (solo izquierda)",
+      List.tabulate(1) (_ => CartaTunel(nextId(), "Callejón (solo izquierda)",
         arriba=false, abajo=false, izquierda=true,  derecha=false, esCallejonSinSalida=true)),
       // "solo abajo"     girado 180° → queda "solo arriba"   (imagen: SinCamino9)
-      List.tabulate(4) (_ => CartaTunel(nextId(), "Callejón (solo abajo)",
+      List.tabulate(1) (_ => CartaTunel(nextId(), "Callejón (solo abajo)",
         arriba=false, abajo=true,  izquierda=false, derecha=false, esCallejonSinSalida=true)),
 
       // ── SC (Sin Camino): lados visuales reales, pero el BFS las ignora ──────
       // Simétricos (no volteables) — misma forma que sus equivalentes con camino
-      List.tabulate(3) (_ => CartaTunel(nextId(), "SC Cruce",
+      List.tabulate(1) (_ => CartaTunel(nextId(), "SC Cruce",
         arriba=true,  abajo=true,  izquierda=true,  derecha=true,  esCallejonSinSalida=true)),
-      List.tabulate(3) (_ => CartaTunel(nextId(), "SC Recto H",
+      List.tabulate(1) (_ => CartaTunel(nextId(), "SC Recto H",
         arriba=false, abajo=false, izquierda=true,  derecha=true,  esCallejonSinSalida=true)),
-      List.tabulate(3) (_ => CartaTunel(nextId(), "SC Recto V",
+      List.tabulate(1) (_ => CartaTunel(nextId(), "SC Recto V",
         arriba=true,  abajo=true,  izquierda=false, derecha=false, esCallejonSinSalida=true)),
       // Volteables: mismos lados que sus equivalentes con camino
-      List.tabulate(6) (_ => CartaTunel(nextId(), "SC Cruce en T (sin arriba)",
+      List.tabulate(1) (_ => CartaTunel(nextId(), "SC Cruce en T (sin arriba)",
         arriba=false, abajo=true,  izquierda=true,  derecha=true,  esCallejonSinSalida=true)),
-      List.tabulate(6) (_ => CartaTunel(nextId(), "SC Cruce en T (sin der)",
+      List.tabulate(1) (_ => CartaTunel(nextId(), "SC Cruce en T (sin der)",
         arriba=true,  abajo=true,  izquierda=true,  derecha=false, esCallejonSinSalida=true)),
-      List.tabulate(6) (_ => CartaTunel(nextId(), "SC Curva (arriba-izq)",
+      List.tabulate(1) (_ => CartaTunel(nextId(), "SC Curva (arriba-izq)",
         arriba=true,  abajo=false, izquierda=true,  derecha=false, esCallejonSinSalida=true)),
-      List.tabulate(6) (_ => CartaTunel(nextId(), "SC Curva (abajo-izq)",
+      List.tabulate(1) (_ => CartaTunel(nextId(), "SC Curva (abajo-izq)",
         arriba=false, abajo=true,  izquierda=true,  derecha=false, esCallejonSinSalida=true))
     )
 

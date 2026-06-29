@@ -19,6 +19,7 @@ object InterfazJuego extends JFXApp3:
   var cartaSeleccionada: Option[Carta]         = None
   var mensajeError: String                     = ""
   var jugadorObjetivoSeleccionado: Option[Int] = None
+  var cartasVolteadas: Map[Int, Boolean]       = Map.empty
 
   // ── Dimensiones ───────────────────────────────────────────────────────────
   // Las imágenes son 254×169 → relación ~1.5:1 (landscape)
@@ -47,23 +48,26 @@ object InterfazJuego extends JFXApp3:
     case t: CartaTunel if t.esMeta && t.esOro  => "Carta_Oro.png"
     case t: CartaTunel if t.esMeta             => "Carta_Carbon.png"
     case t: CartaTunel => t.nombre match
-      case "Inicio"                     => "Carta_Escalera.png"
-      case "Cruce"                      => "Carta_Camino2.png"
-      case "Túnel Recto H"              => "Carta_Camino1.png"
-      case "Túnel Recto V"              => "Carta_Camino7.png"
-      case "Cruce en T (sin arriba)"    => "Carta_Camino3.png"
-      case "Cruce en T (sin abajo)"     => "Carta_Camino.png"
-      case "Cruce en T (sin izquierda)" => "Carta_Camino.png"
-      case "Cruce en T (sin derecha)"   => "Carta_Camino5.png"
-      case "Curva (arriba-derecha)"     => "Carta_Camino.png"
-      case "Curva (arriba-izquierda)"   => "Carta_Camino4.png"
-      case "Curva (abajo-derecha)"      => "Carta_Camino.png"
-      case "Curva (abajo-izquierda)"    => "Carta_Camino6.png"
-      case "Callejón (solo arriba)"     => "SinCamino.png"
-      case "Callejón (solo abajo)"      => "SinCamino9.png"
-      case "Callejón (solo izquierda)"  => "SinCamino7.png"
-      case "Callejón (solo derecha)"    => "SinCamino.png"
-      case _                            => "reverso.png"
+      case "Inicio"                      => "Carta_Escalera.png"
+      // ── Con conexión ──────────────────────────────────────────────────────
+      case "Cruce"                       => "Carta_Camino2.png"
+      case "Túnel Recto H"               => "Carta_Camino1.png"
+      case "Túnel Recto V"               => "Carta_Camino7.png"
+      case "Cruce en T (sin arriba)"     => "Carta_Camino3.png"  // girado → sin abajo
+      case "Cruce en T (sin derecha)"    => "Carta_Camino5.png"  // girado → sin izquierda
+      case "Curva (arriba-izquierda)"    => "Carta_Camino4.png"  // girado → abajo-derecha
+      case "Curva (abajo-izquierda)"     => "Carta_Camino6.png"  // girado → arriba-derecha
+      case "Callejón (solo izquierda)"   => "SinCamino7.png"     // girado → solo derecha
+      case "Callejón (solo abajo)"       => "SinCamino9.png"     // girado → solo arriba
+      // ── Sin Camino (SC): misma imagen, lógica bloqueada ───────────────────
+      case "SC Cruce"                    => "SinCamino2.png"
+      case "SC Recto H"                  => "SinCamino1.png"
+      case "SC Recto V"                  => "SinCamino8.png"
+      case "SC Cruce en T (sin arriba)"  => "SinCamino3.png"  // girado → sin abajo
+      case "SC Cruce en T (sin der)"     => "SinCamino5.png"  // girado → sin izquierda
+      case "SC Curva (arriba-izq)"       => "SinCamino4.png"  // girado → abajo-derecha
+      case "SC Curva (abajo-izq)"        => "SinCamino6.png"  // girado → arriba-derecha
+      case _                             => "reverso.png"
 
     // ── Cartas de acción ─────────────────────────────────────────────────────
     case a: CartaAccion => a.tipoEfecto match
@@ -71,7 +75,7 @@ object InterfazJuego extends JFXApp3:
       case TipoAccion.SABOTAJE(Herramienta.CARRETILLA)  => "RomperCarro.png"
       case TipoAccion.SABOTAJE(Herramienta.FAROL)       => "RomperFaro.png"
       case TipoAccion.REPARACION(hs)
-        if hs.toSet == Set(Herramienta.PICO)                                  => "Pico.png"
+        if hs.toSet == Set(Herramienta.PICO)                                  => "Carta_Pico.png"
       case TipoAccion.REPARACION(hs)
         if hs.toSet == Set(Herramienta.CARRETILLA)                            => "Carro.png"
       case TipoAccion.REPARACION(hs)
@@ -86,13 +90,20 @@ object InterfazJuego extends JFXApp3:
       case TipoAccion.DERRUMBE => "Derrumbe.png"
       case _                   => "Faro.png"
 
-  // ── Crea un ImageView escalado al tamaño pedido ───────────────────────────
+  // ── Crea un ImageView escalado, rotado 180° si la carta está volteada ────
+  // Se combina el estado de la UI (cartasVolteadas, para la mano) con el
+  // campo imagenVolteada de la propia CartaTunel (para cartas ya en el tablero).
   def crearImageView(carta: Carta, ancho: Double, alto: Double): ImageView =
     val img = new Image(s"file:Imagenes/imagenes_redimensionadas/${nombreImagen(carta)}", ancho, alto, false, true)
-    new ImageView(img):
+    val iv  = new ImageView(img):
       fitWidth      = ancho
       fitHeight     = alto
       preserveRatio = false
+    val estaVolteada = carta match
+      case t: CartaTunel => t.imagenVolteada || cartasVolteadas.getOrElse(carta.id, false)
+      case _             => cartasVolteadas.getOrElse(carta.id, false)
+    if estaVolteada then iv.rotate = 180
+    iv
 
   // =========================================================================
   //  INICIO
@@ -401,33 +412,76 @@ object InterfazJuego extends JFXApp3:
           val cx = 10 + i * espacio
           val cy = manoY
 
-          val esSelec = cartaSeleccionada.exists(_.id == carta.id)
+          val esSelec  = cartaSeleccionada.exists(_.id == carta.id)
+          val esVuelta = cartasVolteadas.getOrElse(carta.id, false)
 
-          // Borde amarillo de selección (detrás de la imagen)
+          // Borde naranja = volteada (se dibuja primero, queda detrás)
+          if esVuelta then
+            val bordeNaranja = new Rectangle:
+              x           = cx - 5; y = cy - 5
+              width       = anchoCartaMano + 10
+              height      = altoCartaMano  + 10
+              fill        = Transparent
+              stroke      = Orange
+              strokeWidth = 2
+              arcWidth    = 10; arcHeight = 10
+            contenedor.children.add(bordeNaranja)
+
+          // Borde amarillo = seleccionada
           if esSelec then
             val borde = new Rectangle:
-              x           = cx - 3
-              y           = cy - 3
+              x           = cx - 3; y = cy - 3
               width       = anchoCartaMano + 6
               height      = altoCartaMano  + 6
               fill        = Transparent
               stroke      = Yellow
               strokeWidth = 3
-              arcWidth    = 10
-              arcHeight   = 10
+              arcWidth    = 10; arcHeight = 10
             contenedor.children.add(borde)
 
           val iv = crearImageView(carta, anchoCartaMano, altoCartaMano)
           iv.layoutX = cx
           iv.layoutY = cy
 
-          iv.onMouseClicked = (_: MouseEvent) =>
-            cartaSeleccionada           = Some(carta)
-            jugadorObjetivoSeleccionado = None
-            mensajeError                = ""
+          iv.onMouseClicked = (e: MouseEvent) =>
+            import scalafx.scene.input.MouseButton
+            if e.button == MouseButton.Secondary then
+              // Clic derecho: voltear cartas de túnel no simétricas (incluye SC)
+              carta match
+                case t: CartaTunel if !t.esMeta &&
+                    t.nombre != "Cruce"      &&
+                    t.nombre != "Túnel Recto H" &&
+                    t.nombre != "Túnel Recto V" &&
+                    t.nombre != "SC Cruce"   &&
+                    t.nombre != "SC Recto H" &&
+                    t.nombre != "SC Recto V" =>
+                  cartasVolteadas = cartasVolteadas + (t.id -> !esVuelta)
+                case _ => ()
+            else
+              // Clic izquierdo: seleccionar (siempre la carta original del mazo)
+              cartaSeleccionada           = Some(carta)
+              jugadorObjetivoSeleccionado = None
+              mensajeError                = ""
             renderizar()
 
           contenedor.children.add(iv)
+
+          // Hint "↕" debajo de cartas volteables
+          carta match
+            case t: CartaTunel if !t.esMeta &&
+                t.nombre != "Cruce"      &&
+                t.nombre != "Túnel Recto H" &&
+                t.nombre != "Túnel Recto V" &&
+                t.nombre != "SC Cruce"   &&
+                t.nombre != "SC Recto H" &&
+                t.nombre != "SC Recto V" =>
+              val hint = new Text:
+                x    = cx + 4; y = cy + altoCartaMano + 11
+                text = if esVuelta then "↕ volteada [clic der]" else "↕ voltear [clic der]"
+                fill = if esVuelta then Orange else DimGray
+                font = Font.font("Arial", 8)
+              contenedor.children.add(hint)
+            case _ => ()
         }
 
         // ── Botón descartar ─────────────────────────────────────────────────
@@ -496,10 +550,12 @@ object InterfazJuego extends JFXApp3:
           cartaSeleccionada match
 
             case Some(carta: CartaTunel) =>
-              estadoJuego.colocarTunel(carta.id, posDestino) match
+              val estaVolteada = cartasVolteadas.getOrElse(carta.id, false)
+              estadoJuego.colocarTunel(carta.id, posDestino, voltear = estaVolteada) match
                 case ResultadoAccion.Exito(nuevoJuego, _) =>
                   estadoJuego       = nuevoJuego
                   cartaSeleccionada = None
+                  cartasVolteadas   = Map.empty
                   mensajeError      = ""
                 case ResultadoAccion.Error(razon) =>
                   mensajeError = razon

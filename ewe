@@ -1,0 +1,18 @@
+      case "Cruce"                       => "Carta_Camino2.png"
+      case "Túnel Recto H"               => "Carta_Camino1.png"
+      case "Túnel Recto V"               => "Carta_Camino7.png"
+      case "Cruce en T (sin arriba)"     => "Carta_Camino3.png"  // girado → sin abajo
+      case "Cruce en T (sin derecha)"    => "Carta_Camino5.png"  // girado → sin izquierda
+      case "Curva (arriba-izquierda)"    => "Carta_Camino4.png"  // girado → abajo-derecha
+      case "Curva (abajo-izquierda)"     => "Carta_Camino6.png"  // girado → arriba-derecha
+      case "Callejón (solo izquierda)"   => "SinCamino7.png"     // girado → solo derecha
+      case "Callejón (solo abajo)"       => "SinCamino9.png"     // girado → solo arriba
+      // ── Sin Camino (SC): misma imagen, lógica bloqueada ───────────────────
+      case "SC Cruce"                    => "SinCamino2.png"
+      case "SC Recto H"                  => "SinCamino1.png"
+      case "SC Recto V"                  => "SinCamino8.png"
+      case "SC Cruce en T (sin arriba)"  => "SinCamino3.png"
+      case "SC Cruce en T (sin der)"     => "SinCamino5.png"  // girado → sin izquierda
+      case "SC Curva (arriba-izq)"       => "SinCamino4.png"  // girado → abajo-derecha
+      case "SC Curva (abajo-izq)"        => "SinCamino6.png"  // girado → arriba-derecha
+      case _                             => "reverso.png"

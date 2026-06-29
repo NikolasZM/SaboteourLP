@@ -51,8 +51,16 @@ case class CartaTunel(
     esCallejonSinSalida: Boolean,
     esMeta: Boolean = false,
     estaOculta: Boolean = false,
-    esOro: Boolean = false
-) extends Carta
+    esOro: Boolean = false,
+    imagenVolteada: Boolean = false  // solo para la UI: indica si dibujar rotada 180°
+) extends Carta:
+  def voltear: CartaTunel = this.copy(
+    arriba         = abajo,
+    abajo          = arriba,
+    izquierda      = derecha,
+    derecha        = izquierda,
+    imagenVolteada = !imagenVolteada
+  )
 
 case class CartaAccion(
     id: Int,
@@ -190,6 +198,9 @@ case class Tablero(
     bfsDesde(posicionInicio)
 
   private def vecinosConectados(pos: Posicion, carta: CartaTunel): List[Posicion] =
+    // Las SC tienen lados visuales reales (para validar colocacion) pero
+    // nunca propagan conexion en el BFS: son callejones ciegos para la red.
+    if carta.esCallejonSinSalida then return Nil
     List(
       Option.when(carta.arriba)(pos.arriba),
       Option.when(carta.abajo)(pos.abajo),
@@ -197,7 +208,9 @@ case class Tablero(
       Option.when(carta.derecha)(pos.derecha)
     ).flatten.filter { vecPos =>
       cuadricula.get(vecPos).exists { vecCarta =>
-        if vecPos == pos.arriba         then vecCarta.abajo
+        // Tampoco entrar en una SC desde el otro lado
+        if vecCarta.esCallejonSinSalida then false
+        else if vecPos == pos.arriba    then vecCarta.abajo
         else if vecPos == pos.abajo     then vecCarta.arriba
         else if vecPos == pos.izquierda then vecCarta.derecha
         else                                 vecCarta.izquierda
@@ -253,7 +266,8 @@ case class Juego(
     this.copy(listaJugadores = jugadoresConCartas, mazo = mazoFinal)
 
   // ── Colocar carta de túnel ────────────────────────────────────────────────
-  def colocarTunel(cartaId: Int, pos: Posicion): ResultadoAccion =
+  // voltear=true aplica la rotación 180° antes de validar y colocar
+  def colocarTunel(cartaId: Int, pos: Posicion, voltear: Boolean = false): ResultadoAccion =
     val jugador = jugadorActual
 
     if jugador.estaBloqueado then
@@ -261,7 +275,9 @@ case class Juego(
 
     jugador.mano.collectFirst { case c: CartaTunel if c.id == cartaId => c } match
       case None => ResultadoAccion.Error("Esa carta de túnel no está en tu mano.")
-      case Some(carta) =>
+      case Some(cartaOriginal) =>
+        // Aplicar volteo si el jugador lo pidió
+        val carta = if voltear then cartaOriginal.voltear else cartaOriginal
         if !tablero.validarColocacion(pos, carta) then
           ResultadoAccion.Error("Posición inválida: la carta no conecta correctamente.")
         else
@@ -434,45 +450,57 @@ object GeneradorMazo:
     def nextId(): Int = idIter.next()
 
     val tuneles: List[CartaTunel] = List.concat(
-      // ── Cruce de 4 vías ──────────────────────────────────────────────────
+      // ── Cruce de 4 vías (simétrico, no se gira) ──────────────────────────
       List.tabulate(5) (_ => CartaTunel(nextId(), "Cruce",
         arriba=true,  abajo=true,  izquierda=true,  derecha=true,  esCallejonSinSalida=false)),
 
-      // ── Rectas (2 vías opuestas) ─────────────────────────────────────────
+      // ── Rectas (simétricas al girar 180°, no se giran) ───────────────────
       List.tabulate(8) (_ => CartaTunel(nextId(), "Túnel Recto H",
         arriba=false, abajo=false, izquierda=true,  derecha=true,  esCallejonSinSalida=false)),
       List.tabulate(8) (_ => CartaTunel(nextId(), "Túnel Recto V",
         arriba=true,  abajo=true,  izquierda=false, derecha=false, esCallejonSinSalida=false)),
 
-      // ── Cruces en T (3 vías) ─────────────────────────────────────────────
-      List.tabulate(4) (_ => CartaTunel(nextId(), "Cruce en T (sin arriba)",
+      // ── Cruces en T: 2 tipos, volteables 180° ─────────────────────────────
+      // "sin arriba"  girado 180° → queda "sin abajo"      (imagen: Carta_Camino3)
+      List.tabulate(8) (_ => CartaTunel(nextId(), "Cruce en T (sin arriba)",
         arriba=false, abajo=true,  izquierda=true,  derecha=true,  esCallejonSinSalida=false)),
-      List.tabulate(4) (_ => CartaTunel(nextId(), "Cruce en T (sin abajo)",
-        arriba=true,  abajo=false, izquierda=true,  derecha=true,  esCallejonSinSalida=false)),
-      List.tabulate(4) (_ => CartaTunel(nextId(), "Cruce en T (sin izquierda)",
-        arriba=true,  abajo=true,  izquierda=false, derecha=true,  esCallejonSinSalida=false)),
-      List.tabulate(4) (_ => CartaTunel(nextId(), "Cruce en T (sin derecha)",
+      // "sin derecha" girado 180° → queda "sin izquierda"  (imagen: Carta_Camino5)
+      List.tabulate(8) (_ => CartaTunel(nextId(), "Cruce en T (sin derecha)",
         arriba=true,  abajo=true,  izquierda=true,  derecha=false, esCallejonSinSalida=false)),
 
-      // ── Curvas / codos (2 vías en ángulo recto) ─────────────────────────
-      List.tabulate(3) (_ => CartaTunel(nextId(), "Curva (arriba-derecha)",
-        arriba=true,  abajo=false, izquierda=false, derecha=true,  esCallejonSinSalida=false)),
-      List.tabulate(3) (_ => CartaTunel(nextId(), "Curva (arriba-izquierda)",
+      // ── Codos: 2 tipos, volteables 180° ──────────────────────────────────
+      // "arriba-izq"  girado 180° → queda "abajo-der"      (imagen: Carta_Camino4)
+      List.tabulate(6) (_ => CartaTunel(nextId(), "Curva (arriba-izquierda)",
         arriba=true,  abajo=false, izquierda=true,  derecha=false, esCallejonSinSalida=false)),
-      List.tabulate(3) (_ => CartaTunel(nextId(), "Curva (abajo-derecha)",
-        arriba=false, abajo=true,  izquierda=false, derecha=true,  esCallejonSinSalida=false)),
-      List.tabulate(3) (_ => CartaTunel(nextId(), "Curva (abajo-izquierda)",
+      // "abajo-izq"   girado 180° → queda "arriba-der"     (imagen: Carta_Camino6)
+      List.tabulate(6) (_ => CartaTunel(nextId(), "Curva (abajo-izquierda)",
         arriba=false, abajo=true,  izquierda=true,  derecha=false, esCallejonSinSalida=false)),
 
-      // ── Callejones sin salida (1 sola vía: bloquean la ruta de verdad) ──
-      List.tabulate(2) (_ => CartaTunel(nextId(), "Callejón (solo arriba)",
-        arriba=true,  abajo=false, izquierda=false, derecha=false, esCallejonSinSalida=true)),
-      List.tabulate(2) (_ => CartaTunel(nextId(), "Callejón (solo abajo)",
-        arriba=false, abajo=true,  izquierda=false, derecha=false, esCallejonSinSalida=true)),
-      List.tabulate(2) (_ => CartaTunel(nextId(), "Callejón (solo izquierda)",
+      // ── Callejones con 1 vía: 2 tipos, volteables 180° ───────────────────
+      // "solo izquierda" girado 180° → queda "solo derecha"  (imagen: SinCamino7)
+      List.tabulate(4) (_ => CartaTunel(nextId(), "Callejón (solo izquierda)",
         arriba=false, abajo=false, izquierda=true,  derecha=false, esCallejonSinSalida=true)),
-      List.tabulate(2) (_ => CartaTunel(nextId(), "Callejón (solo derecha)",
-        arriba=false, abajo=false, izquierda=false, derecha=true,  esCallejonSinSalida=true))
+      // "solo abajo"     girado 180° → queda "solo arriba"   (imagen: SinCamino9)
+      List.tabulate(4) (_ => CartaTunel(nextId(), "Callejón (solo abajo)",
+        arriba=false, abajo=true,  izquierda=false, derecha=false, esCallejonSinSalida=true)),
+
+      // ── SC (Sin Camino): lados visuales reales, pero el BFS las ignora ──────
+      // Simétricos (no volteables) — misma forma que sus equivalentes con camino
+      List.tabulate(3) (_ => CartaTunel(nextId(), "SC Cruce",
+        arriba=true,  abajo=true,  izquierda=true,  derecha=true,  esCallejonSinSalida=true)),
+      List.tabulate(3) (_ => CartaTunel(nextId(), "SC Recto H",
+        arriba=false, abajo=false, izquierda=true,  derecha=true,  esCallejonSinSalida=true)),
+      List.tabulate(3) (_ => CartaTunel(nextId(), "SC Recto V",
+        arriba=true,  abajo=true,  izquierda=false, derecha=false, esCallejonSinSalida=true)),
+      // Volteables: mismos lados que sus equivalentes con camino
+      List.tabulate(6) (_ => CartaTunel(nextId(), "SC Cruce en T (sin arriba)",
+        arriba=false, abajo=true,  izquierda=true,  derecha=true,  esCallejonSinSalida=true)),
+      List.tabulate(6) (_ => CartaTunel(nextId(), "SC Cruce en T (sin der)",
+        arriba=true,  abajo=true,  izquierda=true,  derecha=false, esCallejonSinSalida=true)),
+      List.tabulate(6) (_ => CartaTunel(nextId(), "SC Curva (arriba-izq)",
+        arriba=true,  abajo=false, izquierda=true,  derecha=false, esCallejonSinSalida=true)),
+      List.tabulate(6) (_ => CartaTunel(nextId(), "SC Curva (abajo-izq)",
+        arriba=false, abajo=true,  izquierda=true,  derecha=false, esCallejonSinSalida=true))
     )
 
     val sabotajes: List[CartaAccion] =
